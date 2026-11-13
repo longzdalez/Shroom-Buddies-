@@ -49,9 +49,15 @@ const views = {
     const k = today(), done = S.done[k] || [];
     const n = S.practices.filter(p => done.includes(p.id)).length;
     const todays = S.journal.filter(e => e.date === k);
+    const pct = S.practices.length ? Math.round(n / S.practices.length * 100) : 0, st = streak();
+    const h = new Date().getHours(), greet = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
     return `
-      <div class="card"><h2>${nice(k)}</h2>
-        <div class="muted">${n} of ${S.practices.length} practices done · streak: ${streak()} day${streak() === 1 ? '' : 's'}</div></div>
+      <div class="greet">✦ ${greet}, buddy ✦</div>
+      <div class="card hero">
+        <div class="ring" style="--p:${pct}"><div><b>${pct}%</b><small>TODAY</small></div></div>
+        <div><div class="date">${nice(k)}</div>
+          <div class="muted">${n} of ${S.practices.length} practices done</div>
+          <div class="chips"><span class="chip">🔥 ${st} day streak</span><span class="chip">📓 ${S.journal.length} entries</span></div></div></div>
       <div class="card"><h2>Daily practices</h2>
         ${S.practices.map(p => `<label class="practice ${done.includes(p.id) ? 'done' : ''}">
           <input type="checkbox" data-practice="${p.id}" ${done.includes(p.id) ? 'checked' : ''}><span>${esc(p.name)}</span></label>`).join('')}
@@ -163,7 +169,44 @@ async function fillBackgrounds() {
   sel.value = S.settings.bg;
   sel.onchange = () => { S.settings.bg = sel.value; save('settings'); applyBg(); };
 }
-function applyBg() { document.documentElement.style.setProperty('--bg-image', S.settings.bg ? `url("${S.settings.bg}")` : 'none'); }
+function applyBg() {
+  document.documentElement.style.setProperty('--bg-image', S.settings.bg ? `url("${S.settings.bg}")` : 'none');
+  document.body.classList.toggle('has-bg', !!S.settings.bg);
+}
+
+// ---------- splash: title slide, once per session ----------
+(function splash() {
+  const el = $('#splash'); if (!el) return;
+  const done = () => { el.remove(); document.body.classList.remove('splashing'); };
+  const hide = () => { el.classList.add('hide'); document.body.classList.remove('splashing'); setTimeout(() => el.remove(), 900); };
+  if (sessionStorage.getItem('sb_seen')) return done();
+  sessionStorage.setItem('sb_seen', '1');
+  el.onclick = hide; setTimeout(hide, 4500);
+})();
+
+// ---------- drifting bokeh sparkles (gold, teal, ember) ----------
+(function sparkles() {
+  const c = $('#sparkles'); if (!c || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const x = c.getContext('2d'), cols = ['251,231,166', '233,196,106', '120,200,210', '255,150,60', '255,255,255'];
+  let W, H, dpr, P = [];
+  const mk = () => ({ x: Math.random() * W, y: Math.random() * H, r: (Math.random() ** 3) * 9 + 0.6, c: cols[Math.random() * cols.length | 0],
+    vy: -(Math.random() * 0.25 + 0.05), vx: (Math.random() - 0.5) * 0.12, a: Math.random() * 0.55 + 0.25, t: Math.random() * 6.28, s: Math.random() * 0.02 + 0.005 });
+  const size = () => { dpr = Math.min(devicePixelRatio || 1, 2); W = innerWidth; H = innerHeight; c.width = W * dpr; c.height = H * dpr; x.setTransform(dpr, 0, 0, dpr, 0, 0);
+    P = Array.from({ length: Math.min(90, Math.round(W * H / 9000)) }, mk); };
+  size(); addEventListener('resize', size);
+  (function tick() {
+    x.clearRect(0, 0, W, H);
+    for (const p of P) {
+      p.x += p.vx; p.y += p.vy; p.t += p.s;
+      if (p.y < -20) { p.y = H + 20; p.x = Math.random() * W; }
+      const a = p.a * (0.55 + 0.45 * Math.sin(p.t));
+      const g = x.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r * 2.2);
+      g.addColorStop(0, `rgba(${p.c},${a})`); g.addColorStop(0.4, `rgba(${p.c},${a * 0.45})`); g.addColorStop(1, `rgba(${p.c},0)`);
+      x.fillStyle = g; x.beginPath(); x.arc(p.x, p.y, p.r * 2.2, 0, 6.283); x.fill();
+    }
+    document.hidden ? setTimeout(tick, 500) : requestAnimationFrame(tick);
+  })();
+})();
 
 // ---------- render & events ----------
 function render() {
