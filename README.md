@@ -10,9 +10,10 @@ A free phone app for daily practices, journaling, a calendar and guides.
 ## Features
 - 🌱 **Today** – daily practice checklist, streak, today's journal entry
 - 📓 **Journal** – mood, energy, intention and notes
-- 📅 **Calendar** – see which days have entries/practices
 - 📖 **Guides** – your own guides, written as simple text files in `guides/`
-- ⚙️ **Settings** – edit practices, choose a background picture, backup
+- 🍄 **Tracker** – log the days you took mushrooms (microdose or grams)
+- 📅 **Calendar** – everything together, plus a graph of practices, mood, energy and doses
+- ⚙️ **Settings** – edit practices, backup
 
 ## Put it on your phone (free)
 1. In this repo on GitHub: **Settings → Pages → Branch: `main` / root → Save**
@@ -21,4 +22,4 @@ A free phone app for daily practices, journaling, a calendar and guides.
 
 ## Adding content
 - **Guides:** add a `.md` file to `guides/` and list it in `guides/guides.json`
-- **Backgrounds:** add pictures to `backgrounds/` and list them in `backgrounds/backgrounds.json`
+- **Quotes:** edit `quotes.json` to change the quote of the day

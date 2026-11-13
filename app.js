@@ -10,7 +10,7 @@ const S = {
   journal: store.get('journal', []),          // [{id, date, mood, energy, intention, text}]
   practices: store.get('practices', DEFAULT_PRACTICES),
   done: store.get('done', {}),                // {'YYYY-MM-DD': [practiceId,...]}
-  settings: store.get('settings', { bg: '' }),
+  doses: store.get('doses', {}),              // {'YYYY-MM-DD': {micro:true} or {grams:1.5}}
 };
 const save = k => store.set(k, S[k]);
 
@@ -42,7 +42,7 @@ function md(src) {
 }
 
 // ---------- views ----------
-let current = 'today', calMonth = new Date(), calSel = today();
+let current = 'today', calMonth = new Date(), calSel = today(), trMonth = new Date(), trSel = today();
 
 const views = {
   today() {
@@ -51,7 +51,7 @@ const views = {
     const todays = S.journal.filter(e => e.date === k);
     const pct = S.practices.length ? Math.round(n / S.practices.length * 100) : 0, st = streak();
     const h = new Date().getHours(), greet = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
-    return `
+    return `${quoteHTML()}
       <div class="greet">✦ ${greet}, buddy ✦</div>
       <div class="card hero">
         <div class="ring" style="--p:${pct}"><div><b>${pct}%</b><small>TODAY</small></div></div>
@@ -77,9 +77,9 @@ const views = {
     let cells = ['M', 'T', 'W', 'T', 'F', 'S', 'S'].map(d => `<div class="dow">${d}</div>`).join('');
     cells += '<div></div>'.repeat(first);
     for (let d = 1; d <= days; d++) {
-      const k = `${y}-${z(m + 1)}-${z(d)}`, hasJ = S.journal.some(e => e.date === k), p = (S.done[k] || []).length;
+      const k = `${y}-${z(m + 1)}-${z(d)}`, hasJ = S.journal.some(e => e.date === k), p = (S.done[k] || []).length, ds = S.doses[k];
       cells += `<div class="day ${k === today() ? 'today' : ''} ${k === calSel ? 'sel' : ''}" data-day="${k}">${d}
-        <div class="dots">${hasJ ? '📓' : ''}${p ? '🌱' : ''}</div></div>`;
+        <div class="dots">${hasJ ? '📓' : ''}${p ? '🌱' : ''}${ds ? '🍄' : ''}</div></div>`;
     }
     const ents = S.journal.filter(e => e.date === calSel), done = S.done[calSel] || [];
     return `<div class="card">
@@ -88,9 +88,41 @@ const views = {
           <button class="ghost small" data-act="nextM" style="flex:0">›</button></div>
         <div class="cal">${cells}</div></div>
       <div class="card"><h2>${nice(calSel)}</h2>
+        <div class="muted">Mushrooms: ${doseText(S.doses[calSel]) || 'none'}</div>
         <div class="muted">Practices: ${done.length ? S.practices.filter(p => done.includes(p.id)).map(p => esc(p.name)).join(', ') : 'none'}</div>
         ${ents.map(e => `<div style="margin-top:10px">${entryHTML(e)}</div>`).join('')}
-        <button class="small" data-act="newEntry" data-date="${calSel}" style="margin-top:10px">+ Entry for this day</button></div>`;
+        <button class="small" data-act="newEntry" data-date="${calSel}" style="margin-top:10px">+ Entry for this day</button></div>
+      ${graphHTML(y, m)}`;
+  },
+  tracker() {
+    const y = trMonth.getFullYear(), m = trMonth.getMonth();
+    const first = (new Date(y, m, 1).getDay() + 6) % 7, days = new Date(y, m + 1, 0).getDate();
+    let cells = ['M', 'T', 'W', 'T', 'F', 'S', 'S'].map(d => `<div class="dow">${d}</div>`).join('') + '<div></div>'.repeat(first);
+    let count = 0, grams = 0;
+    for (let d = 1; d <= days; d++) {
+      const k = `${y}-${z(m + 1)}-${z(d)}`, ds = S.doses[k];
+      if (ds) { count++; grams += ds.grams || 0; }
+      cells += `<div class="day ${k === today() ? 'today' : ''} ${k === trSel ? 'sel' : ''} ${ds ? 'dosed' : ''}" data-trday="${k}">${d}
+        <div class="dots">${ds ? (ds.micro ? '🍄' : `<small>${ds.grams}g</small>`) : ''}</div></div>`;
+    }
+    const last = Object.keys(S.doses).filter(k => k <= today()).sort().pop();
+    const since = last ? Math.round((new Date(today() + 'T12:00') - new Date(last + 'T12:00')) / 864e5) : null;
+    const cur = S.doses[trSel];
+    return `<div class="card hero"><div class="ring" style="--p:${Math.min(100, count / days * 100)}"><div><b>${count}</b><small>DAYS</small></div></div>
+        <div><div class="date">${trMonth.toLocaleDateString(undefined, { month: 'long' })}</div>
+          <div class="muted">${count} mushroom day${count === 1 ? '' : 's'} this month</div>
+          <div class="chips">${grams ? `<span class="chip">⚖️ ${+grams.toFixed(2)}g logged</span>` : ''}<span class="chip">⏳ ${since === null ? 'none yet' : since === 0 ? 'today' : since + ' day' + (since === 1 ? '' : 's') + ' ago'}</span></div></div></div>
+      <div class="card">
+        <div class="row" style="margin-bottom:10px"><button class="ghost small" data-act="trPrev" style="flex:0">‹</button>
+          <h2 style="text-align:center;margin:0">${trMonth.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</h2>
+          <button class="ghost small" data-act="trNext" style="flex:0">›</button></div>
+        <div class="cal">${cells}</div></div>
+      <div class="card"><h2>${nice(trSel)}</h2>
+        <p class="muted" style="margin-top:0">${cur ? 'Logged: ' + doseText(cur) : 'Nothing logged for this day.'}</p>
+        <button data-act="logMicro" style="width:100%">🍄 Microdose</button>
+        <div class="row" style="margin-top:10px"><input id="grams" type="number" inputmode="decimal" min="0" step="0.01" placeholder="Or type grams" value="${cur && cur.grams ? cur.grams : ''}" style="margin:0">
+          <button data-act="logGrams" style="flex:0">Save</button></div>
+        ${cur ? '<button class="ghost small" data-act="clearDose" style="margin-top:10px">Clear this day</button>' : ''}</div>`;
   },
   guides() { loadGuides(); return '<div class="card muted">Loading guides…</div>'; },
   settings() {
@@ -98,7 +130,6 @@ const views = {
         ${S.practices.map(p => `<div class="practice"><span style="flex:1">${esc(p.name)}</span>
           <button class="ghost small" data-del-practice="${p.id}">Remove</button></div>`).join('')}
         <div class="row" style="margin-top:8px"><input id="newPractice" placeholder="Add a practice"><button data-act="addPractice" style="flex:0">Add</button></div></div>
-      <div class="card"><h2>Background</h2><select id="bgSelect"><option value="">Default</option></select></div>
       <div class="card"><h2>Backup</h2><p class="muted">Your data only lives on this phone. Export a backup now and then.</p>
         <div class="row"><button data-act="export">Export</button><button class="ghost" data-act="import">Import</button></div>
         <input type="file" id="importFile" accept="application/json" hidden></div>`;
@@ -160,18 +191,50 @@ async function loadGuides() {
   } catch { $('#view').innerHTML = '<div class="card muted">Guides are unavailable offline until opened once online.</div>'; }
 }
 
-async function fillBackgrounds() {
-  const sel = $('#bgSelect'); if (!sel) return;
-  try {
-    const list = await (await fetch('backgrounds/backgrounds.json')).json();
-    list.forEach(b => sel.insertAdjacentHTML('beforeend', `<option value="backgrounds/${esc(b.file)}">${esc(b.name)}</option>`));
-  } catch {}
-  sel.value = S.settings.bg;
-  sel.onchange = () => { S.settings.bg = sel.value; save('settings'); applyBg(); };
+const doseText = d => !d ? '' : d.micro ? 'Microdose' : `${d.grams}g`;
+
+// ---------- quote of the day (same quote all day, changes daily) ----------
+let QUOTES = [];
+fetch('quotes.json').then(r => r.json()).then(q => { QUOTES = q; if (current === 'today') render(); }).catch(() => {});
+function quoteHTML() {
+  if (!QUOTES.length) return '';
+  const n = Math.floor(new Date(today() + 'T12:00') / 864e5), q = QUOTES[n % QUOTES.length];
+  return `<div class="quote"><p>“${esc(q.text)}”</p><span>— ${esc(q.by)}</span></div>`;
 }
-function applyBg() {
-  document.documentElement.style.setProperty('--bg-image', S.settings.bg ? `url("${S.settings.bg}")` : 'none');
-  document.body.classList.toggle('has-bg', !!S.settings.bg);
+
+// ---------- graph: practices, mood, energy and mushroom days for a month ----------
+function dayStats(k) {
+  const es = S.journal.filter(e => e.date === k), avg = f => { const v = es.map(e => e[f]).filter(Boolean); return v.length ? v.reduce((a, b) => a + b) / v.length : null; };
+  return { mood: avg('mood'), energy: avg('energy'), practices: (S.done[k] || []).length, dose: S.doses[k] };
+}
+function graphHTML(y, m) {
+  const days = new Date(y, m + 1, 0).getDate(), D = [];
+  for (let d = 1; d <= days; d++) { const k = `${y}-${z(m + 1)}-${z(d)}`; D.push({ d, k, ...dayStats(k) }); }
+  if (!D.some(x => x.mood || x.energy || x.practices || x.dose))
+    return '<div class="card"><h2>Mood & practices graph</h2><p class="muted">Log practices, journal moods and mushroom days and your graph will appear here.</p></div>';
+  const W = 340, H = 190, L = 22, R = 6, T = 22, B = 22, cw = (W - L - R) / days, maxP = Math.max(1, S.practices.length);
+  const X = d => L + (d - 0.5) * cw, Y = v => T + (H - T - B) * (1 - (v - 1) / 4);
+  const line = (f, cls) => { let p = '', pen = false;
+    D.forEach(x => { if (x[f]) { p += `${pen ? 'L' : 'M'}${X(x.d).toFixed(1)} ${Y(x[f]).toFixed(1)}`; pen = true; } });
+    return `<path d="${p}" class="${cls}"/>` + D.filter(x => x[f]).map(x => `<circle cx="${X(x.d).toFixed(1)}" cy="${Y(x[f]).toFixed(1)}" r="2.6" class="${cls}"/>`).join(''); };
+  let g = '';
+  for (let v = 1; v <= 5; v++) g += `<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" class="grid"/><text x="${L - 6}" y="${Y(v) + 3}" class="ax" text-anchor="end">${v}</text>`;
+  D.forEach(x => {
+    if (x.practices) { const h = (H - T - B) * x.practices / maxP; g += `<rect x="${(X(x.d) - cw * 0.35).toFixed(1)}" y="${(H - B - h).toFixed(1)}" width="${(cw * 0.7).toFixed(1)}" height="${h.toFixed(1)}" rx="1.5" class="bar"/>`; }
+    if (x.dose) g += `<text x="${X(x.d).toFixed(1)}" y="${T - 7}" text-anchor="middle" font-size="${x.dose.micro ? 9 : Math.min(14, 8 + x.dose.grams * 2)}">🍄</text>`;
+    if (x.d === 1 || x.d % 5 === 0) g += `<text x="${X(x.d).toFixed(1)}" y="${H - 7}" class="ax" text-anchor="middle">${x.d}</text>`;
+    g += `<rect x="${(X(x.d) - cw / 2).toFixed(1)}" y="0" width="${cw.toFixed(1)}" height="${H}" fill="transparent" data-day="${x.k}"/>`;
+  });
+  g += line('energy', 'en') + line('mood', 'mo');
+  const withMood = D.filter(x => x.mood), avg = a => a.length ? (a.reduce((s, x) => s + x.mood, 0) / a.length) : null;
+  const cmp = (label, test) => { const a = avg(withMood.filter(test)), b = avg(withMood.filter(x => !test(x)));
+    return a === null || b === null ? '' : `<div class="link"><span>${label}</span><b class="${a > b ? 'up' : a < b ? 'down' : ''}">${MOODS[Math.round(a) - 1]} ${a.toFixed(1)}</b><span class="muted">vs ${b.toFixed(1)} without</span></div>`; };
+  const links = [cmp('🍄 Mushroom days', x => !!x.dose)].concat(S.practices.map(p => cmp(esc(p.name), x => (S.done[x.k] || []).includes(p.id)))).join('');
+  return `<div class="card"><h2>Mood & practices graph</h2>
+    <svg viewBox="0 0 ${W} ${H}" class="graph">${g}</svg>
+    <div class="legend"><span><i class="mo"></i>Mood</span><span><i class="en"></i>Energy</span><span><i class="bar"></i>Practices done</span><span>🍄 Mushroom day</span></div>
+    <p class="muted" style="font-size:.78rem">Tap a day on the graph to see its details above.</p>
+    ${links ? `<h2 style="margin-top:14px">Average mood this month</h2>${links}` : ''}</div>`;
 }
 
 // ---------- splash: title slide, once per session ----------
@@ -212,7 +275,6 @@ function applyBg() {
 function render() {
   $('#view').innerHTML = views[current]();
   document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b.dataset.view === current));
-  if (current === 'settings') fillBackgrounds();
   window.scrollTo(0, 0);
 }
 function go(v) { current = v; render(); }
@@ -225,16 +287,17 @@ $('#view').addEventListener('change', e => {
   if (id) { const k = today(), d = new Set(S.done[k] || []); e.target.checked ? d.add(id) : d.delete(id); S.done[k] = [...d]; save('done'); render(); }
   if (e.target.id === 'importFile' && e.target.files[0]) {
     e.target.files[0].text().then(t => {
-      try { const d = JSON.parse(t); ['journal', 'practices', 'done', 'settings'].forEach(k => { if (d[k]) { S[k] = d[k]; save(k); } }); applyBg(); go('today'); }
+      try { const d = JSON.parse(t); ['journal', 'practices', 'done', 'doses'].forEach(k => { if (d[k]) { S[k] = d[k]; save(k); } }); go('today'); }
       catch { alertMsg('That file is not a valid backup.'); }
     });
   }
 });
 
 $('#view').addEventListener('click', e => {
-  const t = e.target.closest('button,[data-day]'); if (!t) return;
+  const t = e.target.closest('button,[data-day],[data-trday]'); if (!t) return;
   const d = t.dataset;
   if (d.day) { calSel = d.day; render(); return; }
+  if (d.trday) { trSel = d.trday; render(); return; }
   if (d.nav) return go(d.nav);
   if (d.edit) return entryForm(S.journal.find(x => x.id === d.edit));
   if (d.delEntry) { if (confirm('Delete this entry?')) { S.journal = S.journal.filter(x => x.id !== d.delEntry); save('journal'); render(); } return; }
@@ -244,15 +307,19 @@ $('#view').addEventListener('click', e => {
     case 'cancel': return render();
     case 'prevM': calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() - 1, 1); return render();
     case 'nextM': calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() + 1, 1); return render();
+    case 'trPrev': trMonth = new Date(trMonth.getFullYear(), trMonth.getMonth() - 1, 1); return render();
+    case 'trNext': trMonth = new Date(trMonth.getFullYear(), trMonth.getMonth() + 1, 1); return render();
+    case 'logMicro': S.doses[trSel] = { micro: true }; save('doses'); return render();
+    case 'logGrams': { const g = parseFloat($('#grams').value); if (g > 0) { S.doses[trSel] = { grams: +g.toFixed(2) }; save('doses'); render(); } return; }
+    case 'clearDose': delete S.doses[trSel]; save('doses'); return render();
     case 'addPractice': { const v = $('#newPractice').value.trim(); if (v) { S.practices.push({ id: uid(), name: v }); save('practices'); render(); } return; }
     case 'export': {
-      const blob = new Blob([JSON.stringify({ journal: S.journal, practices: S.practices, done: S.done, settings: S.settings }, null, 2)], { type: 'application/json' });
+      const blob = new Blob([JSON.stringify({ journal: S.journal, practices: S.practices, done: S.done, doses: S.doses }, null, 2)], { type: 'application/json' });
       const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `shroom-buddies-backup-${today()}.json`; a.click(); return;
     }
     case 'import': return $('#importFile').click();
   }
 });
 
-applyBg();
 render();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});

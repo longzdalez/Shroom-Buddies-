@@ -6,20 +6,16 @@
   --card:rgba(10,24,44,.55);--line:rgba(233,196,106,.28);
   --cap:linear-gradient(90deg,var(--red),var(--orange) 35%,#ff8a1f 60%,var(--red));
   --goldtxt:linear-gradient(180deg,var(--gold-hi),var(--gold) 55%,var(--gold-lo));
-  --bg-image:none;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--text);background:var(--navy);min-height:100vh;padding-bottom:84px}
 
 /* ---------- night-sky background + sparkles ---------- */
 #bg{position:fixed;inset:0;z-index:-2;
-  background:var(--bg-image) center/cover,
-    radial-gradient(ellipse 70% 45% at 50% 38%,rgba(46,110,120,.45),transparent 70%),
+  background:radial-gradient(ellipse 70% 45% at 50% 38%,rgba(46,110,120,.45),transparent 70%),
     radial-gradient(ellipse 60% 30% at 50% 100%,rgba(190,140,50,.22),transparent 70%),
     radial-gradient(circle at 15% 20%,rgba(30,80,130,.35),transparent 40%),
     linear-gradient(180deg,#06101f,#0a1a30 45%,#071224)}
-#bg::after{content:"";position:absolute;inset:0;background:rgba(4,10,22,var(--bg-dim,.0))}
-body.has-bg #bg{--bg-dim:.5}
 #sparkles{position:fixed;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none}
 
 /* ---------- splash (title slide, built in code) ---------- */
@@ -39,17 +35,23 @@ body.splashing header,body.splashing main,body.splashing nav{visibility:hidden}
 @keyframes pulse{50%{opacity:.35}}
 
 /* ---------- header ---------- */
-header{position:sticky;top:0;z-index:5;display:flex;justify-content:space-between;align-items:center;padding:calc(env(safe-area-inset-top) + 10px) 16px 10px;
+header{position:sticky;top:0;z-index:5;display:flex;justify-content:center;align-items:center;padding:calc(env(safe-area-inset-top) + 10px) 16px 10px;
   background:linear-gradient(180deg,rgba(6,14,30,.92),rgba(6,14,30,.55) 70%,transparent);backdrop-filter:blur(4px)}
-.brand{display:flex;align-items:center;gap:10px}
-.brand img{height:40px;filter:drop-shadow(0 0 10px rgba(255,122,26,.55));animation:bob 5s ease-in-out infinite}
+.brand{display:flex;align-items:center;gap:12px}
+.brand img{height:44px;filter:drop-shadow(0 0 10px rgba(255,122,26,.55));animation:bob 5s ease-in-out infinite}
 @keyframes bob{50%{transform:translateY(-3px) rotate(-2deg)}}
 h1,h2,.display{font-family:Cinzel,Georgia,serif}
 h1{font-size:1.35rem;margin:0;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
   background:var(--goldtxt);-webkit-background-clip:text;background-clip:text;color:transparent;
   filter:drop-shadow(0 1px 0 #3a2a08) drop-shadow(0 0 8px rgba(233,196,106,.35))}
 h2{font-size:1.05rem;margin:0 0 12px;font-weight:700;letter-spacing:.04em;color:var(--gold)}
-header button{background:none;font-size:1.3rem;padding:6px;box-shadow:none}
+header button{position:absolute;right:10px;background:none;font-size:1.2rem;padding:6px;box-shadow:none}
+
+/* ---------- quote of the day ---------- */
+.quote{text-align:center;margin:2px 6px 14px;padding:12px 14px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);
+  background:radial-gradient(ellipse at center,rgba(233,196,106,.08),transparent 70%)}
+.quote p{margin:0 0 6px;font-family:"Cormorant Garamond",Georgia,serif;font-style:italic;font-weight:600;font-size:1.12rem;line-height:1.35;color:var(--gold-hi)}
+.quote span{font-family:Cinzel,serif;font-size:.72rem;letter-spacing:.12em;color:var(--gold);text-transform:uppercase}
 
 /* ---------- layout + cards ---------- */
 main{padding:6px 16px 16px;max-width:640px;margin:0 auto;animation:fadeUp .45s ease both}
@@ -67,7 +69,8 @@ main{padding:6px 16px 16px;max-width:640px;margin:0 auto;animation:fadeUp .45s e
 .ring{--p:0;flex:0 0 92px;height:92px;border-radius:50%;display:grid;place-items:center;position:relative;
   background:conic-gradient(var(--orange) calc(var(--p)*1%),rgba(255,255,255,.08) 0);box-shadow:0 0 22px rgba(255,122,26,calc(var(--p)*.006))}
 .ring::after{content:"";position:absolute;inset:8px;border-radius:50%;background:#0b1a2e}
-.ring b{position:relative;z-index:1;font-family:Cinzel,serif;font-size:1.35rem;color:var(--gold-hi)}
+.ring>div{position:relative;z-index:1;text-align:center}
+.ring b{font-family:Cinzel,serif;font-size:1.35rem;color:var(--gold-hi)}
 .ring small{display:block;font-size:.6rem;color:var(--muted);text-align:center;font-family:system-ui;letter-spacing:.08em}
 .hero .date{font-family:Cinzel,serif;font-size:1.1rem;color:var(--gold);margin-bottom:4px}
 .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
@@ -106,7 +109,26 @@ label{font-size:.9rem;color:var(--muted)}
 .cal .day{aspect-ratio:1;border-radius:10px;background:rgba(255,255,255,.04);display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:.9rem;cursor:pointer;border:1px solid transparent;transition:.15s}
 .cal .day.today{border-color:var(--gold);box-shadow:0 0 10px rgba(233,196,106,.4)}
 .cal .day.sel{background:var(--cap);color:#fff;font-weight:700}
-.dots{font-size:.55rem;height:10px;line-height:10px}
+.dots{font-size:.55rem;height:10px;line-height:10px;white-space:nowrap}
+.dots small{font-size:.58rem;color:var(--gold-hi);font-weight:700}
+.cal .day.dosed{background:rgba(255,122,26,.16);border-color:rgba(255,122,26,.45)}
+.cal .day.dosed.sel{background:var(--cap)}
+
+/* ---------- graph ---------- */
+.graph{width:100%;height:auto;display:block;overflow:visible}
+.graph .grid{stroke:rgba(233,196,106,.12);stroke-width:1}
+.graph .ax{fill:var(--muted);font-size:8px;font-family:system-ui}
+.graph .bar{fill:rgba(233,196,106,.28)}
+.graph path{fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.graph path.mo{stroke:var(--orange);filter:drop-shadow(0 0 3px rgba(255,122,26,.7))}
+.graph path.en{stroke:#6fd0dc;stroke-dasharray:4 3}
+.graph circle.mo{fill:var(--orange)}.graph circle.en{fill:#6fd0dc}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:.75rem;color:var(--muted);margin:8px 0 4px}
+.legend i{display:inline-block;width:14px;height:4px;border-radius:2px;margin-right:5px;vertical-align:middle}
+.legend i.mo{background:var(--orange)}.legend i.en{background:#6fd0dc}.legend i.bar{background:rgba(233,196,106,.5);height:9px}
+.link{display:flex;align-items:baseline;gap:8px;padding:7px 0;border-bottom:1px solid rgba(233,196,106,.08);font-size:.88rem}
+.link span:first-child{flex:1}.link b{font-weight:700;color:var(--text)}.link b.up{color:#9be29b}.link b.down{color:#ff9a7a}
+.link .muted{font-size:.75rem}
 
 /* ---------- guides ---------- */
 .guide{line-height:1.6}
@@ -119,7 +141,7 @@ code{background:rgba(233,196,106,.12);padding:1px 5px;border-radius:5px}
 nav{position:fixed;bottom:0;left:0;right:0;z-index:5;display:flex;padding-bottom:env(safe-area-inset-bottom);
   background:linear-gradient(180deg,rgba(8,18,38,.85),rgba(4,10,22,.98));border-top:1px solid var(--line);backdrop-filter:blur(10px)}
 nav button{flex:1;background:none;color:var(--muted);font-size:1.3rem;padding:9px 0 7px;display:flex;flex-direction:column;align-items:center;font-weight:400;box-shadow:none;text-shadow:none;border-radius:0;position:relative;filter:grayscale(.6)}
-nav button span{font-size:.66rem;font-family:Cinzel,serif;letter-spacing:.06em;margin-top:2px}
+nav button span{font-size:.6rem;font-family:Cinzel,serif;letter-spacing:.06em;margin-top:2px}
 nav button.active{color:var(--gold-hi);filter:none}
 nav button.active::before{content:"";position:absolute;top:-1px;left:28%;right:28%;height:2px;border-radius:2px;background:var(--goldtxt);box-shadow:0 0 10px var(--gold)}
 
