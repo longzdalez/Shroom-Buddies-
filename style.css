@@ -101,6 +101,13 @@ label{font-size:.9rem;color:var(--muted)}
 .scale{display:flex;gap:6px;margin:4px 0 12px}
 .scale button{flex:1;background:rgba(255,255,255,.05);border:1px solid var(--line);color:var(--text);padding:9px 0;box-shadow:none;text-shadow:none}
 .scale button.sel{background:var(--cap);border-color:var(--gold);box-shadow:0 0 12px rgba(255,122,26,.5)}
+.checkin{padding:10px 12px;border-radius:14px;margin-bottom:10px;border:1px solid rgba(233,196,106,.12);background:rgba(255,255,255,.02)}
+.checkin:last-child{margin-bottom:0}
+.checkin.now{border-color:rgba(233,196,106,.45);background:rgba(233,196,106,.06);box-shadow:0 0 14px rgba(233,196,106,.12)}
+.ci-label{font-family:Cinzel,serif;font-size:.9rem;color:var(--gold-hi);margin-bottom:6px}
+.ci-row{display:flex;align-items:center;gap:8px}.ci-row .scale{flex:1;margin:3px 0}
+.ci-k{flex:0 0 52px;font-size:.78rem;color:var(--muted)}
+.howto ol{margin:0 0 10px;padding-left:20px;line-height:1.5}.howto li{margin-bottom:8px}.howto b{color:var(--gold-hi)}
 .entry h3{margin:0 0 4px;font-size:1rem;font-family:Cinzel,serif;color:var(--gold-hi)}.entry p{white-space:pre-wrap;margin:8px 0 0;line-height:1.5}
 
 /* ---------- calendar ---------- */

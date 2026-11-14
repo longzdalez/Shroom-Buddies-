@@ -11,6 +11,7 @@ const S = {
   practices: store.get('practices', DEFAULT_PRACTICES),
   done: store.get('done', {}),                // {'YYYY-MM-DD': [practiceId,...]}
   doses: store.get('doses', {}),              // {'YYYY-MM-DD': {micro:true} or {grams:1.5}}
+  checkins: store.get('checkins', {}),        // {'YYYY-MM-DD': {am:{mood,energy}, pm:{mood,energy}}}
 };
 const save = k => store.set(k, S[k]);
 
@@ -58,6 +59,7 @@ const views = {
         <div><div class="date">${nice(k)}</div>
           <div class="muted">${n} of ${S.practices.length} practices done</div>
           <div class="chips"><span class="chip">🔥 ${st} day streak</span><span class="chip">📓 ${S.journal.length} entries</span></div></div></div>
+      ${checkinHTML(k)}
       <div class="card"><h2>Daily practices</h2>
         ${S.practices.map(p => `<label class="practice ${done.includes(p.id) ? 'done' : ''}">
           <input type="checkbox" data-practice="${p.id}" ${done.includes(p.id) ? 'checked' : ''}><span>${esc(p.name)}</span></label>`).join('')}
@@ -89,6 +91,7 @@ const views = {
         <div class="cal">${cells}</div></div>
       <div class="card"><h2>${nice(calSel)}</h2>
         <div class="muted">Mushrooms: ${doseText(S.doses[calSel]) || 'none'}</div>
+        <div class="muted">Morning: ${ciText((S.checkins[calSel] || {}).am)} · Afternoon: ${ciText((S.checkins[calSel] || {}).pm)}</div>
         <div class="muted">Practices: ${done.length ? S.practices.filter(p => done.includes(p.id)).map(p => esc(p.name)).join(', ') : 'none'}</div>
         ${ents.map(e => `<div style="margin-top:10px">${entryHTML(e)}</div>`).join('')}
         <button class="small" data-act="newEntry" data-date="${calSel}" style="margin-top:10px">+ Entry for this day</button></div>
@@ -126,7 +129,17 @@ const views = {
   },
   guides() { loadGuides(); return '<div class="card muted">Loading guides…</div>'; },
   settings() {
-    return `<div class="card"><h2>Daily practices</h2>
+    return `<div class="card howto"><h2>How to use Shroom Buddies</h2>
+        <ol>
+          <li><b>🌱 Today</b> – tap your mood and energy in the morning and again in the afternoon, then tick off each practice as you do it.</li>
+          <li><b>📓 Journal</b> – write how you feel, your intention for the day and anything you noticed.</li>
+          <li><b>🍄 Tracker</b> – tap a day, then press <b>Microdose</b> or type how many grams and press <b>Save</b>.</li>
+          <li><b>📅 Calendar</b> – tap any day to see everything you logged. Scroll down for your graph and to see which days you felt best.</li>
+          <li><b>📖 Guides</b> – read the guides.</li>
+          <li><b>⚙️ Settings</b> – add or remove practices, and press <b>Export</b> now and then to save a backup.</li>
+        </ol>
+        <p class="muted">Everything is kept only on this phone. To install it, open the app in your browser and choose <b>Add to Home Screen</b>.</p></div>
+      <div class="card"><h2>Daily practices</h2>
         ${S.practices.map(p => `<div class="practice"><span style="flex:1">${esc(p.name)}</span>
           <button class="ghost small" data-del-practice="${p.id}">Remove</button></div>`).join('')}
         <div class="row" style="margin-top:8px"><input id="newPractice" placeholder="Add a practice"><button data-act="addPractice" style="flex:0">Add</button></div></div>
@@ -202,16 +215,30 @@ function quoteHTML() {
   return `<div class="quote"><p>“${esc(q.text)}”</p><span>— ${esc(q.by)}</span></div>`;
 }
 
+// ---------- morning & afternoon check-ins ----------
+const PERIODS = [['am', '🌅 Morning'], ['pm', '☀️ Afternoon']];
+const ciText = c => !c || (!c.mood && !c.energy) ? '–' : `${c.mood ? MOODS[c.mood - 1] : ''}${c.energy ? ` ⚡${c.energy}` : ''}`;
+function checkinHTML(k) {
+  const c = S.checkins[k] || {}, now = new Date().getHours() < 12 ? 'am' : 'pm';
+  return `<div class="card"><h2>How are you feeling?</h2>${PERIODS.map(([p, label]) => `
+    <div class="checkin ${p === now ? 'now' : ''}"><div class="ci-label">${label}</div>
+      <div class="ci-row"><span class="ci-k">Mood</span><div class="scale">${MOODS.map((e, i) =>
+        `<button class="${(c[p] || {}).mood === i + 1 ? 'sel' : ''}" data-ci="${p}" data-f="mood" data-v="${i + 1}">${e}</button>`).join('')}</div></div>
+      <div class="ci-row"><span class="ci-k">Energy</span><div class="scale">${[1, 2, 3, 4, 5].map(i =>
+        `<button class="${(c[p] || {}).energy === i ? 'sel' : ''}" data-ci="${p}" data-f="energy" data-v="${i}">${i}</button>`).join('')}</div></div></div>`).join('')}</div>`;
+}
+
 // ---------- graph: practices, mood, energy and mushroom days for a month ----------
 function dayStats(k) {
-  const es = S.journal.filter(e => e.date === k), avg = f => { const v = es.map(e => e[f]).filter(Boolean); return v.length ? v.reduce((a, b) => a + b) / v.length : null; };
-  return { mood: avg('mood'), energy: avg('energy'), practices: (S.done[k] || []).length, dose: S.doses[k] };
+  const c = S.checkins[k] || {}, es = S.journal.filter(e => e.date === k).concat([c.am, c.pm].filter(Boolean));
+  const avg = f => { const v = es.map(e => e[f]).filter(Boolean); return v.length ? v.reduce((a, b) => a + b) / v.length : null; };
+  return { mood: avg('mood'), energy: avg('energy'), amMood: (c.am || {}).mood || null, pmMood: (c.pm || {}).mood || null, practices: (S.done[k] || []).length, dose: S.doses[k] };
 }
 function graphHTML(y, m) {
   const days = new Date(y, m + 1, 0).getDate(), D = [];
   for (let d = 1; d <= days; d++) { const k = `${y}-${z(m + 1)}-${z(d)}`; D.push({ d, k, ...dayStats(k) }); }
   if (!D.some(x => x.mood || x.energy || x.practices || x.dose))
-    return '<div class="card"><h2>Mood & practices graph</h2><p class="muted">Log practices, journal moods and mushroom days and your graph will appear here.</p></div>';
+    return '<div class="card"><h2>Mood & practices graph</h2><p class="muted">Do your morning and afternoon check-ins, practices and mushroom days and your graph will appear here.</p></div>';
   const W = 340, H = 190, L = 22, R = 6, T = 22, B = 22, cw = (W - L - R) / days, maxP = Math.max(1, S.practices.length);
   const X = d => L + (d - 0.5) * cw, Y = v => T + (H - T - B) * (1 - (v - 1) / 4);
   const line = (f, cls) => { let p = '', pen = false;
@@ -229,7 +256,9 @@ function graphHTML(y, m) {
   const withMood = D.filter(x => x.mood), avg = a => a.length ? (a.reduce((s, x) => s + x.mood, 0) / a.length) : null;
   const cmp = (label, test) => { const a = avg(withMood.filter(test)), b = avg(withMood.filter(x => !test(x)));
     return a === null || b === null ? '' : `<div class="link"><span>${label}</span><b class="${a > b ? 'up' : a < b ? 'down' : ''}">${MOODS[Math.round(a) - 1]} ${a.toFixed(1)}</b><span class="muted">vs ${b.toFixed(1)} without</span></div>`; };
-  const links = [cmp('🍄 Mushroom days', x => !!x.dose)].concat(S.practices.map(p => cmp(esc(p.name), x => (S.done[x.k] || []).includes(p.id)))).join('');
+  const am = D.map(x => x.amMood).filter(Boolean), pm = D.map(x => x.pmMood).filter(Boolean), mean = a => a.reduce((s, v) => s + v, 0) / a.length;
+  const ampm = am.length && pm.length ? `<div class="link"><span>🌅 Morning vs ☀️ afternoon</span><b>${MOODS[Math.round(mean(am)) - 1]} ${mean(am).toFixed(1)}</b><span class="muted">vs ${mean(pm).toFixed(1)}</span></div>` : '';
+  const links = ampm + [cmp('🍄 Mushroom days', x => !!x.dose)].concat(S.practices.map(p => cmp(esc(p.name), x => (S.done[x.k] || []).includes(p.id)))).join('');
   return `<div class="card"><h2>Mood & practices graph</h2>
     <svg viewBox="0 0 ${W} ${H}" class="graph">${g}</svg>
     <div class="legend"><span><i class="mo"></i>Mood</span><span><i class="en"></i>Energy</span><span><i class="bar"></i>Practices done</span><span>🍄 Mushroom day</span></div>
@@ -287,7 +316,7 @@ $('#view').addEventListener('change', e => {
   if (id) { const k = today(), d = new Set(S.done[k] || []); e.target.checked ? d.add(id) : d.delete(id); S.done[k] = [...d]; save('done'); render(); }
   if (e.target.id === 'importFile' && e.target.files[0]) {
     e.target.files[0].text().then(t => {
-      try { const d = JSON.parse(t); ['journal', 'practices', 'done', 'doses'].forEach(k => { if (d[k]) { S[k] = d[k]; save(k); } }); go('today'); }
+      try { const d = JSON.parse(t); ['journal', 'practices', 'done', 'doses', 'checkins'].forEach(k => { if (d[k]) { S[k] = d[k]; save(k); } }); go('today'); }
       catch { alertMsg('That file is not a valid backup.'); }
     });
   }
@@ -298,6 +327,11 @@ $('#view').addEventListener('click', e => {
   const d = t.dataset;
   if (d.day) { calSel = d.day; render(); return; }
   if (d.trday) { trSel = d.trday; render(); return; }
+  if (d.ci) {
+    const k = today(), c = S.checkins[k] = S.checkins[k] || {}, p = c[d.ci] = c[d.ci] || {}, v = +d.v;
+    p[d.f] = p[d.f] === v ? 0 : v; save('checkins');
+    const y = scrollY; render(); scrollTo(0, y); return;
+  }
   if (d.nav) return go(d.nav);
   if (d.edit) return entryForm(S.journal.find(x => x.id === d.edit));
   if (d.delEntry) { if (confirm('Delete this entry?')) { S.journal = S.journal.filter(x => x.id !== d.delEntry); save('journal'); render(); } return; }
@@ -314,7 +348,7 @@ $('#view').addEventListener('click', e => {
     case 'clearDose': delete S.doses[trSel]; save('doses'); return render();
     case 'addPractice': { const v = $('#newPractice').value.trim(); if (v) { S.practices.push({ id: uid(), name: v }); save('practices'); render(); } return; }
     case 'export': {
-      const blob = new Blob([JSON.stringify({ journal: S.journal, practices: S.practices, done: S.done, doses: S.doses }, null, 2)], { type: 'application/json' });
+      const blob = new Blob([JSON.stringify({ journal: S.journal, practices: S.practices, done: S.done, doses: S.doses, checkins: S.checkins }, null, 2)], { type: 'application/json' });
       const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `shroom-buddies-backup-${today()}.json`; a.click(); return;
     }
     case 'import': return $('#importFile').click();
