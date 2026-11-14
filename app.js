@@ -232,7 +232,7 @@ function checkinHTML(k) {
 function dayStats(k) {
   const c = S.checkins[k] || {}, es = S.journal.filter(e => e.date === k).concat([c.am, c.pm].filter(Boolean));
   const avg = f => { const v = es.map(e => e[f]).filter(Boolean); return v.length ? v.reduce((a, b) => a + b) / v.length : null; };
-  return { mood: avg('mood'), energy: avg('energy'), amMood: (c.am || {}).mood || null, pmMood: (c.pm || {}).mood || null, practices: (S.done[k] || []).length, dose: S.doses[k] };
+  return { mood: avg('mood'), energy: avg('energy'), amMood: (c.am || {}).mood || null, pmMood: (c.pm || {}).mood || null, amEn: (c.am || {}).energy || null, pmEn: (c.pm || {}).energy || null, practices: (S.done[k] || []).length, dose: S.doses[k] };
 }
 function graphHTML(y, m) {
   const days = new Date(y, m + 1, 0).getDate(), D = [];
@@ -252,7 +252,7 @@ function graphHTML(y, m) {
     if (x.d === 1 || x.d % 5 === 0) g += `<text x="${X(x.d).toFixed(1)}" y="${H - 7}" class="ax" text-anchor="middle">${x.d}</text>`;
     g += `<rect x="${(X(x.d) - cw / 2).toFixed(1)}" y="0" width="${cw.toFixed(1)}" height="${H}" fill="transparent" data-day="${x.k}"/>`;
   });
-  g += line('energy', 'en') + line('mood', 'mo');
+  g += line('amEn', 'en am') + line('pmEn', 'en pm') + line('amMood', 'mo am') + line('pmMood', 'mo pm');
   const withMood = D.filter(x => x.mood), avg = a => a.length ? (a.reduce((s, x) => s + x.mood, 0) / a.length) : null;
   const cmp = (label, test) => { const a = avg(withMood.filter(test)), b = avg(withMood.filter(x => !test(x)));
     return a === null || b === null ? '' : `<div class="link"><span>${label}</span><b class="${a > b ? 'up' : a < b ? 'down' : ''}">${MOODS[Math.round(a) - 1]} ${a.toFixed(1)}</b><span class="muted">vs ${b.toFixed(1)} without</span></div>`; };
@@ -261,7 +261,7 @@ function graphHTML(y, m) {
   const links = ampm + [cmp('🍄 Mushroom days', x => !!x.dose)].concat(S.practices.map(p => cmp(esc(p.name), x => (S.done[x.k] || []).includes(p.id)))).join('');
   return `<div class="card"><h2>Mood & practices graph</h2>
     <svg viewBox="0 0 ${W} ${H}" class="graph">${g}</svg>
-    <div class="legend"><span><i class="mo"></i>Mood</span><span><i class="en"></i>Energy</span><span><i class="bar"></i>Practices done</span><span>🍄 Mushroom day</span></div>
+    <div class="legend"><span><i class="mo am"></i>Morning mood</span><span><i class="mo pm"></i>Afternoon mood</span><span><i class="en am"></i>Morning energy</span><span><i class="en pm"></i>Afternoon energy</span><span><i class="bar"></i>Practices done</span><span>🍄 Mushroom day</span></div>
     <p class="muted" style="font-size:.78rem">Tap a day on the graph to see its details above.</p>
     ${links ? `<h2 style="margin-top:14px">Average mood this month</h2>${links}` : ''}</div>`;
 }
