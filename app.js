@@ -16,12 +16,13 @@ const S = {
   suppLog: store.get('suppLog', {}),          // {'YYYY-MM-DD': [suppId,...]}
   foods: store.get('foods', ['Fruit', 'Vegetables', 'Whole grains', 'Protein', 'Sugar / sweets', 'Caffeine', 'Alcohol'].map((name, i) => ({ id: 'f' + i, name }))),
   foodLog: store.get('foodLog', {}),          // {'YYYY-MM-DD': [foodId,...]}
+  myReels: store.get('myReels', []),          // [{id, url, title}] reels added on this phone
 };
 const LISTS = {
   supps: { items: 'supps', log: 'suppLog', icon: '💊', label: 'Supplements', noun: 'supplement', ph: 'e.g. Vitamin D', reminders: true },
   food: { items: 'foods', log: 'foodLog', icon: '🥗', label: 'Food', noun: 'food type', ph: 'e.g. Leafy greens', reminders: false },
 };
-const KEYS = ['journal', 'practices', 'done', 'doses', 'checkins', 'supps', 'suppLog', 'foods', 'foodLog'];
+const KEYS = ['journal', 'practices', 'done', 'doses', 'checkins', 'supps', 'suppLog', 'foods', 'foodLog', 'myReels'];
 const save = k => store.set(k, S[k]);
 
 // ---------- helpers ----------
@@ -115,6 +116,7 @@ const views = {
     return tabs + (trTab === 'shroom' ? shroomTracker() : listTracker(trTab));
   },
   guides() { loadGuides(); return '<div class="card muted">Loading guides…</div>'; },
+  reels() { loadReels(); return '<div class="card muted">Loading reels…</div>'; },
   settings() { return settingsHTML(); },
 };
 
@@ -212,6 +214,7 @@ function settingsHTML() {
           <li><b>🍄 Tracker</b> – tap a day, then press <b>Microdose</b> or type how many grams and press <b>Save</b>. Use the <b>💊 Supplements</b> and <b>🥗 Food</b> tabs at the top to add your own items and tick them off each day. Give a supplement a time to get a reminder, and press 📅 to add a daily alarm to your phone's calendar.</li>
           <li><b>📅 Calendar</b> – tap any day to see everything you logged. Scroll down for your graph and to see which days you felt best.</li>
           <li><b>📖 Guides</b> – read the guides.</li>
+          <li><b>🎬 Reels</b> – watch videos we've shared. You can also paste your own Instagram, Facebook, TikTok or YouTube links to keep them here, and tap <b>Watch on…</b> to open them in that app.</li>
           <li><b>⚙️ Settings</b> – add or remove practices, and press <b>Export</b> now and then to save a backup.</li>
         </ol>
         <p class="muted">Everything is kept only on this phone. To install it, open the app in your browser and choose <b>Add to Home Screen</b>.</p></div>
@@ -279,6 +282,51 @@ async function loadGuides() {
       window.scrollTo(0, 0);
     });
   } catch { $('#view').innerHTML = '<div class="card muted">Guides are unavailable offline until opened once online.</div>'; }
+}
+
+// ---------- reels: links to Instagram / Facebook / TikTok / YouTube videos with a preview ----------
+function reelInfo(url) {
+  let u; try { u = new URL(url); } catch { return null; }
+  if (u.protocol !== 'https:') return null;
+  const h = u.hostname.replace(/^(www\.|m\.)/, ''), path = u.pathname;
+  let m;
+  if (h === 'instagram.com' && (m = path.match(/^\/(?:[^/]+\/)?(reel|reels|p|tv)\/([\w-]+)/)))
+    return { site: 'Instagram', icon: '📸', embed: `https://www.instagram.com/${m[1] === 'p' ? 'p' : 'reel'}/${m[2]}/embed`, tall: true };
+  if (h === 'facebook.com' || h === 'fb.watch')
+    return { site: 'Facebook', icon: '📘', embed: `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(url)}&show_text=false`, tall: /\/reel/.test(path) };
+  if (h === 'tiktok.com' && (m = path.match(/\/video\/(\d+)/)))
+    return { site: 'TikTok', icon: '🎵', embed: `https://www.tiktok.com/embed/v2/${m[1]}`, tall: true };
+  if (h === 'youtu.be' || h === 'youtube.com') {
+    const id = h === 'youtu.be' ? path.slice(1) : (u.searchParams.get('v') || (path.match(/\/(?:shorts|embed)\/([\w-]+)/) || [])[1]);
+    if (id) return { site: 'YouTube', icon: '▶️', thumb: `https://img.youtube.com/vi/${id}/hqdefault.jpg`, tall: false };
+  }
+  return { site: h, icon: '🔗' };
+}
+function reelCard(r, mine) {
+  const info = reelInfo(r.url); if (!info) return '';
+  const url = esc(r.url);
+  const preview = info.embed ? `<div class="reel-frame ${info.tall ? 'tall' : ''}"><iframe src="${esc(info.embed)}" loading="lazy" allowfullscreen
+      allow="autoplay; encrypted-media; picture-in-picture; clipboard-write" referrerpolicy="strict-origin-when-cross-origin" title="${esc(r.title || info.site)}"></iframe></div>`
+    : info.thumb ? `<a href="${url}" target="_blank" rel="noopener" class="reel-thumb"><img src="${esc(info.thumb)}" alt="" loading="lazy"><span>▶</span></a>` : '';
+  return `<div class="card reel">${r.title ? `<h2>${esc(r.title)}</h2>` : ''}${preview}
+    <div class="row" style="margin-top:10px"><a class="btn" href="${url}" target="_blank" rel="noopener">${info.icon} Watch on ${esc(info.site)}</a>
+    ${mine ? `<button class="ghost small" data-del-reel="${r.id}" style="flex:0">✕</button>` : ''}</div></div>`;
+}
+async function loadReels() {
+  let shared = [];
+  let site = {};
+  try { shared = await (await fetch('reels.json', { cache: 'no-cache' })).json(); } catch {}
+  try { site = await (await fetch('site.json', { cache: 'no-cache' })).json(); } catch {}
+  if (current !== 'reels') return;
+  const web = /^https:\/\//.test(site.website || '') ? `<a class="btn web-btn" href="${esc(site.website)}" target="_blank" rel="noopener">🌐 Visit our website</a>` : '';
+  $('#view').innerHTML = `${web}<div class="card"><h2>🎬 Add a reel</h2>
+      <p class="muted" style="margin-top:0">Paste a link from Instagram, Facebook, TikTok or YouTube. It's saved on this phone.</p>
+      <input id="reelUrl" type="url" inputmode="url" placeholder="https://www.instagram.com/reel/…" style="margin-top:0">
+      <input id="reelTitle" placeholder="Title (optional)" style="margin-top:0">
+      <button data-act="addReel" style="width:100%">Add reel</button></div>
+    ${[...S.myReels].reverse().map(r => reelCard(r, true)).join('')}
+    ${shared.map(r => reelCard(r, false)).join('')}
+    ${!shared.length && !S.myReels.length ? '<div class="card muted">No reels yet.</div>' : ''}`;
 }
 
 const doseText = d => !d ? '' : d.micro ? 'Microdose' : `${d.grams}g`;
@@ -420,6 +468,7 @@ $('#view').addEventListener('click', e => {
     p[d.f] = p[d.f] === v ? 0 : v; save('checkins');
     const y = scrollY; render(); scrollTo(0, y); return;
   }
+  if (d.delReel) { if (confirm('Remove this reel?')) { S.myReels = S.myReels.filter(r => r.id !== d.delReel); save('myReels'); render(); } return; }
   if (d.nav) return go(d.nav);
   if (d.edit) return entryForm(S.journal.find(x => x.id === d.edit));
   if (d.delEntry) { if (confirm('Delete this entry?')) { S.journal = S.journal.filter(x => x.id !== d.delEntry); save('journal'); render(); } return; }
@@ -435,6 +484,11 @@ $('#view').addEventListener('click', e => {
     case 'logGrams': { const g = parseFloat($('#grams').value); if (g > 0) { S.doses[trSel] = { grams: +g.toFixed(2) }; save('doses'); render(); } return; }
     case 'clearDose': delete S.doses[trSel]; save('doses'); return render();
     case 'addItem': { const L = LISTS[d.lt], v = $('#newItem').value.trim(); if (v) { S[L.items].push({ id: uid(), name: v, time: '' }); save(L.items); const y = scrollY; render(); scrollTo(0, y); } return; }
+    case 'addReel': {
+      const url = $('#reelUrl').value.trim(), title = $('#reelTitle').value.trim();
+      if (!reelInfo(url)) { alert('Please paste a full link starting with https://'); return; }
+      S.myReels.push({ id: uid(), url, title }); save('myReels'); return render();
+    }
     case 'addPractice': { const v = $('#newPractice').value.trim(); if (v) { S.practices.push({ id: uid(), name: v }); save('practices'); render(); } return; }
     case 'export': {
       const blob = new Blob([JSON.stringify(Object.fromEntries(KEYS.map(k => [k, S[k]])), null, 2)], { type: 'application/json' });
