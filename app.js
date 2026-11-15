@@ -192,14 +192,16 @@ async function loadGuides() {
   try {
     const list = await (await fetch('guides/guides.json')).json();
     if (current !== 'guides') return;
-    $('#view').innerHTML = list.length ? list.map((g, i) => `<div class="card" data-guide="${i}" style="cursor:pointer">
-      ${g.image ? `<img src="${esc(g.image)}" alt="" style="width:100%;border-radius:10px;margin-bottom:8px">` : ''}<h2 style="margin:0">${esc(g.title)}</h2></div>`).join('')
-      : '<div class="card muted">No guides yet.</div>';
+    $('#view').innerHTML = `<img class="guide-cover" src="guides/img/00_cover.jpg" alt="Shroom Buddies guide" onerror="this.remove()">` +
+      (list.length ? list.map((g, i) => `<div class="card guide-link" data-guide="${i}">
+      ${g.image ? `<img src="${esc(g.image)}" alt="" onerror="this.remove()">` : ''}<h2 style="margin:0"><span class="num">${i + 1}</span>${esc(g.title)}</h2></div>`).join('')
+      : '<div class="card muted">No guides yet.</div>');
     $('#view').querySelectorAll('[data-guide]').forEach(c => c.onclick = async () => {
       const g = list[+c.dataset.guide];
       const txt = await (await fetch('guides/' + g.file)).text();
       $('#view').innerHTML = `<button class="ghost small" data-nav="guides">‹ All guides</button>
-        <div class="card guide">${g.image ? `<img src="${esc(g.image)}" alt="">` : ''}${md(txt)}</div>`;
+        ${g.image ? `<img class="guide-page" src="${esc(g.image)}" alt="" onerror="this.remove()">` : ''}<div class="card guide">${md(txt)}</div>`;
+      window.scrollTo(0, 0);
     });
   } catch { $('#view').innerHTML = '<div class="card muted">Guides are unavailable offline until opened once online.</div>'; }
 }

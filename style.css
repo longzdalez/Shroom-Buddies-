@@ -144,7 +144,11 @@ label{font-size:.9rem;color:var(--muted)}
 .guide{line-height:1.6}
 .guide img{width:100%;border-radius:12px}
 .guide h1{font-size:1.25rem;text-transform:none}.guide h2{margin-top:18px}.guide h3{color:var(--gold-hi)}
-.guide-link{display:flex;align-items:center;gap:12px;cursor:pointer}
+.guide-cover,.guide-page{width:100%;border-radius:14px;margin:0 0 14px;display:block;box-shadow:0 8px 28px rgba(0,0,0,.45)}
+.guide-page{margin-top:10px}
+.guide-link{cursor:pointer;padding:12px}
+.guide-link img{width:100%;border-radius:10px;margin-bottom:10px;display:block}
+.guide-link h2 .num{display:inline-grid;place-items:center;width:26px;height:26px;margin-right:10px;border-radius:50%;background:var(--cap);color:#fff;font-size:.8rem;font-family:system-ui}
 code{background:rgba(233,196,106,.12);padding:1px 5px;border-radius:5px}
 
 /* ---------- bottom nav ---------- */
