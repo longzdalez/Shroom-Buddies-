@@ -11,8 +11,9 @@ A free phone app for daily practices, journaling, a calendar and guides.
 - 🌱 **Today** – daily practice checklist, streak, today's journal entry
 - 📓 **Journal** – mood, energy, intention and notes
 - 📖 **Guides** – your own guides, written as simple text files in `guides/`
-- 🍄 **Tracker** – log the days you took mushrooms (microdose or grams)
+- 🍄 **Tracker** – log the days you took mushrooms (microdose or grams), plus supplements and food
 - 📅 **Calendar** – everything together, plus a graph of practices, mood, energy and doses
+- 🎬 **Reels** – Instagram, Facebook, TikTok and YouTube videos with previews
 - ⚙️ **Settings** – edit practices, backup
 
 ## Put it on your phone (free)
@@ -23,3 +24,7 @@ A free phone app for daily practices, journaling, a calendar and guides.
 ## Adding content
 - **Guides:** add a `.md` file to `guides/` and list it in `guides/guides.json`
 - **Quotes:** edit `quotes.json` to change the quote of the day
+- **Reels for everyone:** add a line to `reels.json`, e.g.
+  `{"title": "Morning routine", "url": "https://www.instagram.com/reel/ABC123/"}`
+  (separate entries with commas). Instagram, Facebook, TikTok and YouTube links show a preview.
+- **Website button:** put your website address in `site.json` (e.g. `"website": "https://shroombuddies.co.uk"`) and a "Visit our website" button appears on the Reels page.
