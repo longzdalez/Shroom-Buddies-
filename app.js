@@ -12,7 +12,16 @@ const S = {
   done: store.get('done', {}),                // {'YYYY-MM-DD': [practiceId,...]}
   doses: store.get('doses', {}),              // {'YYYY-MM-DD': {micro:true} or {grams:1.5}}
   checkins: store.get('checkins', {}),        // {'YYYY-MM-DD': {am:{mood,energy}, pm:{mood,energy}}}
+  supps: store.get('supps', []),              // [{id, name, time:'08:00' or ''}]
+  suppLog: store.get('suppLog', {}),          // {'YYYY-MM-DD': [suppId,...]}
+  foods: store.get('foods', ['Fruit', 'Vegetables', 'Whole grains', 'Protein', 'Sugar / sweets', 'Caffeine', 'Alcohol'].map((name, i) => ({ id: 'f' + i, name }))),
+  foodLog: store.get('foodLog', {}),          // {'YYYY-MM-DD': [foodId,...]}
 };
+const LISTS = {
+  supps: { items: 'supps', log: 'suppLog', icon: '💊', label: 'Supplements', noun: 'supplement', ph: 'e.g. Vitamin D', reminders: true },
+  food: { items: 'foods', log: 'foodLog', icon: '🥗', label: 'Food', noun: 'food type', ph: 'e.g. Leafy greens', reminders: false },
+};
+const KEYS = ['journal', 'practices', 'done', 'doses', 'checkins', 'supps', 'suppLog', 'foods', 'foodLog'];
 const save = k => store.set(k, S[k]);
 
 // ---------- helpers ----------
@@ -43,7 +52,7 @@ function md(src) {
 }
 
 // ---------- views ----------
-let current = 'today', calMonth = new Date(), calSel = today(), trMonth = new Date(), trSel = today();
+let current = 'today', calMonth = new Date(), calSel = today(), trMonth = new Date(), trSel = today(), trTab = 'shroom';
 
 const views = {
   today() {
@@ -54,6 +63,7 @@ const views = {
     const h = new Date().getHours(), greet = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
     return `${quoteHTML()}
       <div class="greet">✦ ${greet}, buddy ✦</div>
+      ${remindersHTML()}
       <div class="card hero">
         <div class="ring" style="--p:${pct}"><div><b>${pct}%</b><small>TODAY</small></div></div>
         <div><div class="date">${nice(k)}</div>
@@ -79,9 +89,9 @@ const views = {
     let cells = ['M', 'T', 'W', 'T', 'F', 'S', 'S'].map(d => `<div class="dow">${d}</div>`).join('');
     cells += '<div></div>'.repeat(first);
     for (let d = 1; d <= days; d++) {
-      const k = `${y}-${z(m + 1)}-${z(d)}`, hasJ = S.journal.some(e => e.date === k), p = (S.done[k] || []).length, ds = S.doses[k];
+      const k = `${y}-${z(m + 1)}-${z(d)}`, hasJ = S.journal.some(e => e.date === k), p = (S.done[k] || []).length, ds = S.doses[k], sp = (S.suppLog[k] || []).length, fd = (S.foodLog[k] || []).length;
       cells += `<div class="day ${k === today() ? 'today' : ''} ${k === calSel ? 'sel' : ''}" data-day="${k}">${d}
-        <div class="dots">${hasJ ? '📓' : ''}${p ? '🌱' : ''}${ds ? '🍄' : ''}</div></div>`;
+        <div class="dots">${hasJ ? '📓' : ''}${p ? '🌱' : ''}${ds ? '🍄' : ''}${sp ? '💊' : ''}${fd ? '🥗' : ''}</div></div>`;
     }
     const ents = S.journal.filter(e => e.date === calSel), done = S.done[calSel] || [];
     return `<div class="card">
@@ -92,12 +102,23 @@ const views = {
       <div class="card"><h2>${nice(calSel)}</h2>
         <div class="muted">Mushrooms: ${doseText(S.doses[calSel]) || 'none'}</div>
         <div class="muted">Morning: ${ciText((S.checkins[calSel] || {}).am)} · Afternoon: ${ciText((S.checkins[calSel] || {}).pm)}</div>
+        <div class="muted">Supplements: ${names('supps', calSel) || 'none'}</div>
+        <div class="muted">Food: ${names('food', calSel) || 'none'}</div>
         <div class="muted">Practices: ${done.length ? S.practices.filter(p => done.includes(p.id)).map(p => esc(p.name)).join(', ') : 'none'}</div>
         ${ents.map(e => `<div style="margin-top:10px">${entryHTML(e)}</div>`).join('')}
         <button class="small" data-act="newEntry" data-date="${calSel}" style="margin-top:10px">+ Entry for this day</button></div>
       ${graphHTML(y, m)}`;
   },
   tracker() {
+    const tabs = `<div class="subtabs">${[['shroom', '🍄 Shrooms'], ['supps', '💊 Supplements'], ['food', '🥗 Food']].map(([t, l]) =>
+      `<button class="${trTab === t ? 'on' : ''}" data-trtab="${t}">${l}</button>`).join('')}</div>`;
+    return tabs + (trTab === 'shroom' ? shroomTracker() : listTracker(trTab));
+  },
+  guides() { loadGuides(); return '<div class="card muted">Loading guides…</div>'; },
+  settings() { return settingsHTML(); },
+};
+
+function shroomTracker() {
     const y = trMonth.getFullYear(), m = trMonth.getMonth();
     const first = (new Date(y, m, 1).getDay() + 6) % 7, days = new Date(y, m + 1, 0).getDate();
     let cells = ['M', 'T', 'W', 'T', 'F', 'S', 'S'].map(d => `<div class="dow">${d}</div>`).join('') + '<div></div>'.repeat(first);
@@ -126,14 +147,69 @@ const views = {
         <div class="row" style="margin-top:10px"><input id="grams" type="number" inputmode="decimal" min="0" step="0.01" placeholder="Or type grams" value="${cur && cur.grams ? cur.grams : ''}" style="margin:0">
           <button data-act="logGrams" style="flex:0">Save</button></div>
         ${cur ? '<button class="ghost small" data-act="clearDose" style="margin-top:10px">Clear this day</button>' : ''}</div>`;
-  },
-  guides() { loadGuides(); return '<div class="card muted">Loading guides…</div>'; },
-  settings() {
+}
+
+// ---------- supplements & food trackers ----------
+const names = (t, k) => S[LISTS[t].items].filter(i => (S[LISTS[t].log][k] || []).includes(i.id)).map(i => esc(i.name)).join(', ');
+function listTracker(t) {
+  const L = LISTS[t], items = S[L.items], log = S[L.log];
+  const y = trMonth.getFullYear(), m = trMonth.getMonth();
+  const first = (new Date(y, m, 1).getDay() + 6) % 7, days = new Date(y, m + 1, 0).getDate();
+  let cells = ['M', 'T', 'W', 'T', 'F', 'S', 'S'].map(d => `<div class="dow">${d}</div>`).join('') + '<div></div>'.repeat(first), logged = 0;
+  for (let d = 1; d <= days; d++) {
+    const k = `${y}-${z(m + 1)}-${z(d)}`, n = (log[k] || []).filter(id => items.some(i => i.id === id)).length;
+    if (n) logged++;
+    cells += `<div class="day ${k === today() ? 'today' : ''} ${k === trSel ? 'sel' : ''} ${n ? 'dosed' : ''}" data-trday="${k}">${d}
+      <div class="dots">${n ? `${L.icon}<small>${n}</small>` : ''}</div></div>`;
+  }
+  const sel = log[trSel] || [], doneToday = items.filter(i => (log[today()] || []).includes(i.id)).length;
+  return `<div class="card hero"><div class="ring" style="--p:${items.length ? doneToday / items.length * 100 : 0}"><div><b>${doneToday}/${items.length}</b><small>TODAY</small></div></div>
+      <div><div class="date">${L.label}</div>
+        <div class="muted">${logged} day${logged === 1 ? '' : 's'} logged in ${trMonth.toLocaleDateString(undefined, { month: 'long' })}</div></div></div>
+    <div class="card">
+      <div class="row" style="margin-bottom:10px"><button class="ghost small" data-act="trPrev" style="flex:0">‹</button>
+        <h2 style="text-align:center;margin:0">${trMonth.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</h2>
+        <button class="ghost small" data-act="trNext" style="flex:0">›</button></div>
+      <div class="cal">${cells}</div></div>
+    <div class="card"><h2>${nice(trSel)}</h2>
+      ${items.length ? items.map(i => `<label class="practice ${sel.includes(i.id) ? 'done' : ''}">
+        <input type="checkbox" data-lt="${t}" data-item="${i.id}" ${sel.includes(i.id) ? 'checked' : ''}><span>${esc(i.name)}</span>
+        ${i.time ? `<small class="muted" style="margin-left:auto">⏰ ${i.time}</small>` : ''}</label>`).join('')
+      : `<p class="muted">Add your ${L.noun}s below, then tick them off each day.</p>`}</div>
+    <div class="card"><h2>Your ${L.label.toLowerCase()}</h2>
+      ${items.map(i => `<div class="item-row"><span>${esc(i.name)}</span>
+        ${L.reminders ? `<input type="time" value="${i.time || ''}" data-time="${i.id}" aria-label="Reminder time">
+          ${i.time ? `<button class="ghost small" data-ics="${i.id}" title="Add a daily reminder to your phone calendar">📅</button>` : ''}` : ''}
+        <button class="ghost small" data-del-item="${i.id}" data-lt="${t}">✕</button></div>`).join('')}
+      <div class="row" style="margin-top:10px"><input id="newItem" placeholder="${L.ph}" style="margin:0">
+        <button data-act="addItem" data-lt="${t}" style="flex:0">Add</button></div>
+      ${L.reminders ? `<p class="muted" style="font-size:.8rem;margin-bottom:0">Optional: set a time for a reminder. You'll see it on the Today page when it's due, and 📅 adds a daily alarm to your phone's calendar so it reminds you even when the app is closed.</p>` : ''}</div>`;
+}
+
+// reminders due now (supplements with a time that aren't ticked yet today)
+function remindersHTML() {
+  const now = `${z(new Date().getHours())}:${z(new Date().getMinutes())}`, taken = S.suppLog[today()] || [];
+  const due = S.supps.filter(i => i.time && i.time <= now && !taken.includes(i.id));
+  return due.length ? `<div class="card reminder"><h2>⏰ Supplement reminder</h2>${due.map(i =>
+    `<div class="item-row"><span>💊 ${esc(i.name)} <small class="muted">(${i.time})</small></span><button class="small" data-quick="${i.id}">Taken ✓</button></div>`).join('')}</div>` : '';
+}
+
+// a repeating daily calendar event with an alarm, which phones can import (works with the app closed)
+function downloadICS(item) {
+  const [hh, mm] = item.time.split(':'), d = today().replace(/-/g, ''), stamp = new Date().toISOString().replace(/[-:]|\.\d+/g, '');
+  const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Shroom Buddies//EN', 'BEGIN:VEVENT', `UID:${item.id}-${Date.now()}@shroombuddies`, `DTSTAMP:${stamp}`,
+    `DTSTART:${d}T${hh}${mm}00`, 'DURATION:PT5M', 'RRULE:FREQ=DAILY', `SUMMARY:💊 Take ${item.name}`, 'DESCRIPTION:Reminder from Shroom Buddies',
+    'BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:Take ${item.name}`, 'TRIGGER:PT0M', 'END:VALARM', 'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([ics], { type: 'text/calendar' }));
+  a.download = `reminder-${item.name.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.ics`; a.click();
+}
+
+function settingsHTML() {
     return `<div class="card howto"><h2>How to use Shroom Buddies</h2>
         <ol>
           <li><b>🌱 Today</b> – tap your mood and energy in the morning and again in the afternoon, then tick off each practice as you do it.</li>
           <li><b>📓 Journal</b> – write how you feel, your intention for the day and anything you noticed.</li>
-          <li><b>🍄 Tracker</b> – tap a day, then press <b>Microdose</b> or type how many grams and press <b>Save</b>.</li>
+          <li><b>🍄 Tracker</b> – tap a day, then press <b>Microdose</b> or type how many grams and press <b>Save</b>. Use the <b>💊 Supplements</b> and <b>🥗 Food</b> tabs at the top to add your own items and tick them off each day. Give a supplement a time to get a reminder, and press 📅 to add a daily alarm to your phone's calendar.</li>
           <li><b>📅 Calendar</b> – tap any day to see everything you logged. Scroll down for your graph and to see which days you felt best.</li>
           <li><b>📖 Guides</b> – read the guides.</li>
           <li><b>⚙️ Settings</b> – add or remove practices, and press <b>Export</b> now and then to save a backup.</li>
@@ -146,8 +222,7 @@ const views = {
       <div class="card"><h2>Backup</h2><p class="muted">Your data only lives on this phone. Export a backup now and then.</p>
         <div class="row"><button data-act="export">Export</button><button class="ghost" data-act="import">Import</button></div>
         <input type="file" id="importFile" accept="application/json" hidden></div>`;
-  },
-};
+}
 
 function entryHTML(e) {
   return `<div class="entry"><h3>${MOODS[e.mood - 1] || ''} ${nice(e.date)}</h3>
@@ -260,7 +335,8 @@ function graphHTML(y, m) {
     return a === null || b === null ? '' : `<div class="link"><span>${label}</span><b class="${a > b ? 'up' : a < b ? 'down' : ''}">${MOODS[Math.round(a) - 1]} ${a.toFixed(1)}</b><span class="muted">vs ${b.toFixed(1)} without</span></div>`; };
   const am = D.map(x => x.amMood).filter(Boolean), pm = D.map(x => x.pmMood).filter(Boolean), mean = a => a.reduce((s, v) => s + v, 0) / a.length;
   const ampm = am.length && pm.length ? `<div class="link"><span>🌅 Morning vs ☀️ afternoon</span><b>${MOODS[Math.round(mean(am)) - 1]} ${mean(am).toFixed(1)}</b><span class="muted">vs ${mean(pm).toFixed(1)}</span></div>` : '';
-  const links = ampm + [cmp('🍄 Mushroom days', x => !!x.dose)].concat(S.practices.map(p => cmp(esc(p.name), x => (S.done[x.k] || []).includes(p.id)))).join('');
+  const links = ampm + [cmp('🍄 Mushroom days', x => !!x.dose)].concat(S.practices.map(p => cmp(esc(p.name), x => (S.done[x.k] || []).includes(p.id))),
+    S.supps.map(i => cmp('💊 ' + esc(i.name), x => (S.suppLog[x.k] || []).includes(i.id))), S.foods.map(i => cmp('🥗 ' + esc(i.name), x => (S.foodLog[x.k] || []).includes(i.id)))).join('');
   return `<div class="card"><h2>Mood & practices graph</h2>
     <svg viewBox="0 0 ${W} ${H}" class="graph">${g}</svg>
     <div class="legend"><span><i class="mo am"></i>Morning mood</span><span><i class="mo pm"></i>Afternoon mood</span><span><i class="en am"></i>Morning energy</span><span><i class="en pm"></i>Afternoon energy</span><span><i class="bar"></i>Practices done</span><span>🍄 Mushroom day</span></div>
@@ -316,9 +392,15 @@ $('#settingsBtn').onclick = () => go('settings');
 $('#view').addEventListener('change', e => {
   const id = e.target.dataset.practice;
   if (id) { const k = today(), d = new Set(S.done[k] || []); e.target.checked ? d.add(id) : d.delete(id); S.done[k] = [...d]; save('done'); render(); }
+  if (e.target.dataset.item) {
+    const L = LISTS[e.target.dataset.lt], d = new Set(S[L.log][trSel] || []);
+    e.target.checked ? d.add(e.target.dataset.item) : d.delete(e.target.dataset.item); S[L.log][trSel] = [...d]; save(L.log);
+    const y = scrollY; render(); scrollTo(0, y);
+  }
+  if (e.target.dataset.time) { const it = S.supps.find(i => i.id === e.target.dataset.time); it.time = e.target.value; save('supps'); const y = scrollY; render(); scrollTo(0, y); }
   if (e.target.id === 'importFile' && e.target.files[0]) {
     e.target.files[0].text().then(t => {
-      try { const d = JSON.parse(t); ['journal', 'practices', 'done', 'doses', 'checkins'].forEach(k => { if (d[k]) { S[k] = d[k]; save(k); } }); go('today'); }
+      try { const d = JSON.parse(t); KEYS.forEach(k => { if (d[k]) { S[k] = d[k]; save(k); } }); go('today'); }
       catch { alertMsg('That file is not a valid backup.'); }
     });
   }
@@ -329,6 +411,10 @@ $('#view').addEventListener('click', e => {
   const d = t.dataset;
   if (d.day) { calSel = d.day; render(); return; }
   if (d.trday) { trSel = d.trday; render(); return; }
+  if (d.trtab) { trTab = d.trtab; render(); return; }
+  if (d.ics) return downloadICS(S.supps.find(i => i.id === d.ics));
+  if (d.quick) { const k = today(); S.suppLog[k] = [...new Set([...(S.suppLog[k] || []), d.quick])]; save('suppLog'); return render(); }
+  if (d.delItem) { const L = LISTS[d.lt], it = S[L.items].find(i => i.id === d.delItem); if (confirm(`Remove ${it.name}?`)) { S[L.items] = S[L.items].filter(i => i.id !== d.delItem); save(L.items); render(); } return; }
   if (d.ci) {
     const k = today(), c = S.checkins[k] = S.checkins[k] || {}, p = c[d.ci] = c[d.ci] || {}, v = +d.v;
     p[d.f] = p[d.f] === v ? 0 : v; save('checkins');
@@ -348,9 +434,10 @@ $('#view').addEventListener('click', e => {
     case 'logMicro': S.doses[trSel] = { micro: true }; save('doses'); return render();
     case 'logGrams': { const g = parseFloat($('#grams').value); if (g > 0) { S.doses[trSel] = { grams: +g.toFixed(2) }; save('doses'); render(); } return; }
     case 'clearDose': delete S.doses[trSel]; save('doses'); return render();
+    case 'addItem': { const L = LISTS[d.lt], v = $('#newItem').value.trim(); if (v) { S[L.items].push({ id: uid(), name: v, time: '' }); save(L.items); const y = scrollY; render(); scrollTo(0, y); } return; }
     case 'addPractice': { const v = $('#newPractice').value.trim(); if (v) { S.practices.push({ id: uid(), name: v }); save('practices'); render(); } return; }
     case 'export': {
-      const blob = new Blob([JSON.stringify({ journal: S.journal, practices: S.practices, done: S.done, doses: S.doses, checkins: S.checkins }, null, 2)], { type: 'application/json' });
+      const blob = new Blob([JSON.stringify(Object.fromEntries(KEYS.map(k => [k, S[k]])), null, 2)], { type: 'application/json' });
       const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `shroom-buddies-backup-${today()}.json`; a.click(); return;
     }
     case 'import': return $('#importFile').click();
@@ -358,4 +445,5 @@ $('#view').addEventListener('click', e => {
 });
 
 render();
+setInterval(() => { if (current === 'today' && !$('#fText')) { const y = scrollY; render(); scrollTo(0, y); } }, 60000);
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});

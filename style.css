@@ -107,6 +107,13 @@ label{font-size:.9rem;color:var(--muted)}
 .ci-label{font-family:Cinzel,serif;font-size:.9rem;color:var(--gold-hi);margin-bottom:6px}
 .ci-row{display:flex;align-items:center;gap:8px}.ci-row .scale{flex:1;margin:3px 0}
 .ci-k{flex:0 0 52px;font-size:.78rem;color:var(--muted)}
+.subtabs{display:flex;gap:6px;margin:0 0 14px;padding:4px;border-radius:14px;background:rgba(255,255,255,.04);border:1px solid var(--line)}
+.subtabs button{flex:1;padding:9px 4px;font-size:.8rem;background:none;box-shadow:none;text-shadow:none;color:var(--muted);font-weight:600}
+.subtabs button.on{background:var(--cap);color:#fff;box-shadow:0 0 12px rgba(255,122,26,.4)}
+.item-row{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(233,196,106,.1)}
+.item-row span{flex:1}.item-row input[type=time]{width:auto;margin:0;padding:6px 8px;color-scheme:dark}
+.reminder{border-color:rgba(255,122,26,.6);box-shadow:0 0 18px rgba(255,122,26,.25)}
+.reminder h2{color:var(--orange)}
 .howto ol{margin:0 0 10px;padding-left:20px;line-height:1.5}.howto li{margin-bottom:8px}.howto b{color:var(--gold-hi)}
 .entry h3{margin:0 0 4px;font-size:1rem;font-family:Cinzel,serif;color:var(--gold-hi)}.entry p{white-space:pre-wrap;margin:8px 0 0;line-height:1.5}
 
