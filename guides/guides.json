@@ -1,3 +1,47 @@
 [
-  {"title":"Welcome to Shroom Buddies","file":"welcome.md","image":""}
+ {
+  "title": "Introduction",
+  "file": "01_intro.md",
+  "image": "guides/img/01_intro.jpg"
+ },
+ {
+  "title": "How It Works",
+  "file": "02_how_it_works.md",
+  "image": "guides/img/02_how_it_works.jpg"
+ },
+ {
+  "title": "Preparing Yourself",
+  "file": "03_preparing_yourself.md",
+  "image": "guides/img/03_preparing_yourself.jpg"
+ },
+ {
+  "title": "Storage, Dosage & Frequency",
+  "file": "04_storage_dosage_frequency.md",
+  "image": "guides/img/04_storage_dosage_frequency.jpg"
+ },
+ {
+  "title": "The Benefits",
+  "file": "05_the_benefits.md",
+  "image": "guides/img/05_the_benefits.jpg"
+ },
+ {
+  "title": "Using Intentions",
+  "file": "06_using_intentions.md",
+  "image": "guides/img/06_using_intentions.jpg"
+ },
+ {
+  "title": "Real-Time Effects",
+  "file": "07_real_time_effects.md",
+  "image": "guides/img/07_real_time_effects.jpg"
+ },
+ {
+  "title": "Longer-Term Effects",
+  "file": "08_longer_term_effects.md",
+  "image": "guides/img/08_longer_term_effects.jpg"
+ },
+ {
+  "title": "Support/Aftercare",
+  "file": "09_support_aftercare.md",
+  "image": "guides/img/09_support_aftercare.jpg"
+ }
 ]
