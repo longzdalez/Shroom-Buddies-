@@ -213,7 +213,7 @@ function settingsHTML() {
           <li><b>📓 Journal</b> – write how you feel, your intention for the day and anything you noticed.</li>
           <li><b>🍄 Tracker</b> – tap a day, then press <b>Microdose</b> or type how many grams and press <b>Save</b>. Use the <b>💊 Supplements</b> and <b>🥗 Food</b> tabs at the top to add your own items and tick them off each day. Give a supplement a time to get a reminder, and press 📅 to add a daily alarm to your phone's calendar.</li>
           <li><b>📅 Calendar</b> – tap any day to see everything you logged. Scroll down for your graph and to see which days you felt best.</li>
-          <li><b>📖 Guides</b> – read the guides.</li>
+          <li><b>📖 Guides</b> – pick a folder (Microdosing or Flood Doses), then tap a guide to read it.</li>
           <li><b>🎬 Reels</b> – watch videos we've shared. You can also paste your own Instagram, Facebook, TikTok or YouTube links to keep them here, and tap <b>Watch on…</b> to open them in that app.</li>
           <li><b>⚙️ Settings</b> – add or remove practices, and press <b>Export</b> now and then to save a backup.</li>
         </ol>
@@ -266,21 +266,38 @@ function streak() {
   return n;
 }
 
+let gFolder = null;
 async function loadGuides() {
   try {
-    const list = await (await fetch('guides/guides.json')).json();
+    let list = await (await fetch('guides/guides.json', { cache: 'no-cache' })).json();
     if (current !== 'guides') return;
-    $('#view').innerHTML = `<img class="guide-cover" src="guides/img/00_cover.jpg" alt="Shroom Buddies guide" onerror="this.remove()">` +
-      (list.length ? list.map((g, i) => `<div class="card guide-link" data-guide="${i}">
-      ${g.image ? `<img src="${esc(g.image)}" alt="" onerror="this.remove()">` : ''}<h2 style="margin:0"><span class="num">${i + 1}</span>${esc(g.title)}</h2></div>`).join('')
-      : '<div class="card muted">No guides yet.</div>');
-    $('#view').querySelectorAll('[data-guide]').forEach(c => c.onclick = async () => {
-      const g = list[+c.dataset.guide];
-      const txt = await (await fetch('guides/' + g.file)).text();
-      $('#view').innerHTML = `<button class="ghost small" data-nav="guides">‹ All guides</button>
-        ${g.image ? `<img class="guide-page" src="${esc(g.image)}" alt="" onerror="this.remove()">` : ''}<div class="card guide">${md(txt)}</div>`;
-      window.scrollTo(0, 0);
-    });
+    const folders = list.length && list[0].folder ? list : [{ folder: 'Guides', guides: list }];
+    const v = $('#view');
+    if (gFolder === null) {          // folder list
+      v.innerHTML = folders.map((f, i) => `<div class="card guide-link folder" data-folder="${i}">
+        ${f.cover ? `<img src="${esc(f.cover)}" alt="" onerror="this.remove()">` : ''}
+        <h2 style="margin:0"><span class="num">${esc(f.icon || '📁')}</span>${esc(f.folder)}</h2>
+        <div class="muted" style="margin-top:4px">${f.guides.length} guide${f.guides.length === 1 ? '' : 's'}</div></div>`).join('');
+      v.querySelectorAll('[data-folder]').forEach(c => c.onclick = () => { gFolder = +c.dataset.folder; loadGuides(); window.scrollTo(0, 0); });
+      return;
+    }
+    const f = folders[gFolder];
+    const showList = () => {
+      v.innerHTML = `<button class="ghost small" data-gfolders>‹ All guides</button>
+        <h2 class="folder-title">${esc(f.icon || '📁')} ${esc(f.folder)}</h2>` +
+        f.guides.map((g, i) => `<div class="card guide-link" data-guide="${i}">
+        ${g.image ? `<img src="${esc(g.image)}" alt="" onerror="this.remove()">` : ''}<h2 style="margin:0"><span class="num">${i + 1}</span>${esc(g.title)}</h2></div>`).join('');
+      v.querySelector('[data-gfolders]').onclick = () => { gFolder = null; loadGuides(); };
+      v.querySelectorAll('[data-guide]').forEach(c => c.onclick = async () => {
+        const g = f.guides[+c.dataset.guide];
+        const txt = await (await fetch('guides/' + g.file)).text();
+        v.innerHTML = `<button class="ghost small" data-gback>‹ ${esc(f.folder)}</button>
+          ${g.image ? `<img class="guide-page" src="${esc(g.image)}" alt="" onerror="this.remove()">` : ''}<div class="card guide">${md(txt)}</div>`;
+        v.querySelector('[data-gback]').onclick = () => { showList(); window.scrollTo(0, 0); };
+        window.scrollTo(0, 0);
+      });
+    };
+    showList();
   } catch { $('#view').innerHTML = '<div class="card muted">Guides are unavailable offline until opened once online.</div>'; }
 }
 
@@ -434,7 +451,7 @@ function render() {
 }
 function go(v) { current = v; render(); }
 
-document.querySelector('nav').onclick = e => { const b = e.target.closest('button'); if (b) go(b.dataset.view); };
+document.querySelector('nav').onclick = e => { const b = e.target.closest('button'); if (b) { if (b.dataset.view === 'guides') gFolder = null; go(b.dataset.view); } };
 $('#settingsBtn').onclick = () => go('settings');
 
 $('#view').addEventListener('change', e => {

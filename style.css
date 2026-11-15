@@ -156,6 +156,8 @@ label{font-size:.9rem;color:var(--muted)}
 .guide-link{cursor:pointer;padding:12px}
 .guide-link img{width:100%;border-radius:10px;margin-bottom:10px;display:block}
 .guide-link h2 .num{display:inline-grid;place-items:center;width:26px;height:26px;margin-right:10px;border-radius:50%;background:var(--cap);color:#fff;font-size:.8rem;font-family:system-ui}
+.folder-title{margin:14px 0 12px;font-size:1.2rem}
+.guide-link.folder h2 .num{background:none;width:auto;font-size:1.3rem}
 .reel h2{margin-bottom:10px}
 .reel-frame{position:relative;width:100%;aspect-ratio:16/9;border-radius:12px;overflow:hidden;background:#000}
 .reel-frame.tall{aspect-ratio:auto;height:min(620px,140vw)}
