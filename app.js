@@ -210,7 +210,7 @@ function settingsHTML() {
     return `<div class="card howto"><h2>How to use Shroom Buddies</h2>
         <ol>
           <li><b>🌱 Today</b> – tap your mood and energy in the morning and again in the afternoon, then tick off each practice as you do it.</li>
-          <li><b>📓 Journal</b> – write how you feel, your intention for the day and anything you noticed.</li>
+          <li><b>📓 Journal</b> – write how you feel, your intention for the day and anything you noticed. Tap <b>🎤 Speak</b> to talk instead of typing, and tap <b>⏹ Stop</b> when you're done.</li>
           <li><b>🍄 Tracker</b> – tap a day, then press <b>Microdose</b> or type how many grams and press <b>Save</b>. Use the <b>💊 Supplements</b> and <b>🥗 Food</b> tabs at the top to add your own items and tick them off each day. Give a supplement a time to get a reminder, and press 📅 to add a daily alarm to your phone's calendar.</li>
           <li><b>📅 Calendar</b> – tap any day to see everything you logged. Scroll down for your graph and to see which days you felt best.</li>
           <li><b>📖 Guides</b> – pick a folder (Microdosing or Flood Doses), then tap a guide to read it.</li>
@@ -243,20 +243,52 @@ function entryForm(e) {
     <label>Date</label><input type="date" id="fDate" value="${e.date}">
     <label>Mood</label>${scale('mood', e.mood, MOODS)}
     <label>Energy</label>${scale('energy', e.energy)}
-    <label>Intention</label><input id="fInt" value="${esc(e.intention)}" placeholder="What do you want to focus on?">
-    <label>Notes</label><textarea id="fText" placeholder="How are you feeling? What did you notice?">${esc(e.text)}</textarea>
+    <div class="lbl-row"><label for="fInt">Intention</label>${micBtn('fInt')}</div><input id="fInt" value="${esc(e.intention)}" placeholder="What do you want to focus on?">
+    <div class="lbl-row"><label for="fText">Notes</label>${micBtn('fText')}</div><textarea id="fText" placeholder="How are you feeling? What did you notice? Tap 🎤 to speak.">${esc(e.text)}</textarea>
     <div class="row"><button class="ghost" data-act="cancel">Cancel</button><button data-act="saveEntry">Save</button></div></div>`;
   const form = { ...e };
+  $('#view').querySelectorAll('[data-mic]').forEach(b => b.onclick = () => dictate(b));
   $('#view').querySelectorAll('[data-scale]').forEach(sc => sc.onclick = ev => {
     const b = ev.target.closest('button'); if (!b) return;
     form[sc.dataset.scale] = +b.dataset.v; sc.querySelectorAll('button').forEach(x => x.classList.toggle('sel', x === b));
   });
   $('[data-act="saveEntry"]').onclick = () => {
+    stopDictation();
     Object.assign(form, { date: $('#fDate').value || today(), intention: $('#fInt').value.trim(), text: $('#fText').value.trim() });
     if (!form.text && !form.mood) return;
     if (form.id) S.journal = S.journal.map(x => x.id === form.id ? form : x); else S.journal.push({ ...form, id: uid() });
     save('journal'); render();
   };
+}
+
+// ---------- voice typing (speak instead of type) ----------
+const micBtn = id => `<button type="button" class="mic" data-mic="${id}" aria-label="Speak instead of typing">🎤 Speak</button>`;
+let rec = null, recBtn = null;
+function stopDictation() { if (rec) { rec.stop(); rec = null; } }
+function dictate(btn) {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { alert("Voice typing isn't available in this browser. Tap the microphone on your phone's keyboard instead."); return; }
+  if (rec) { const same = recBtn === btn; stopDictation(); if (same) return; }
+  const field = document.getElementById(btn.dataset.mic);
+  const base = field.value ? field.value.replace(/\s*$/, ' ') : '';
+  let finals = '';
+  rec = new SR(); recBtn = btn;
+  rec.lang = navigator.language || 'en-GB'; rec.continuous = true; rec.interimResults = true;
+  rec.onresult = ev => {
+    let interim = '';
+    for (let i = ev.resultIndex; i < ev.results.length; i++) {
+      const t = ev.results[i][0].transcript;
+      if (ev.results[i].isFinal) finals += (finals && !/\s$/.test(finals) ? ' ' : '') + t.trim();
+      else interim += t;
+    }
+    let spoken = (finals + (interim ? ' ' + interim : '')).trim();
+    if (!base.trim() || /[.!?]\s*$/.test(base)) spoken = spoken.charAt(0).toUpperCase() + spoken.slice(1);
+    field.value = base + spoken;
+  };
+  rec.onerror = ev => { if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') alert('Please allow microphone access for this app in your phone settings, then try again.'); };
+  rec.onend = () => { btn.classList.remove('on'); btn.textContent = '🎤 Speak'; if (recBtn === btn) { rec = null; recBtn = null; } };
+  btn.classList.add('on'); btn.textContent = '⏹ Stop'; field.focus();
+  try { rec.start(); } catch { btn.classList.remove('on'); btn.textContent = '🎤 Speak'; rec = null; }
 }
 
 function streak() {
@@ -445,6 +477,7 @@ function graphHTML(y, m) {
 
 // ---------- render & events ----------
 function render() {
+  stopDictation();
   $('#view').innerHTML = views[current]();
   document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b.dataset.view === current));
   window.scrollTo(0, 0);
