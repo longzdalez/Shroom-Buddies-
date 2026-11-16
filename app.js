@@ -17,12 +17,15 @@ const S = {
   foods: store.get('foods', ['Fruit', 'Vegetables', 'Whole grains', 'Protein', 'Sugar / sweets', 'Caffeine', 'Alcohol'].map((name, i) => ({ id: 'f' + i, name }))),
   foodLog: store.get('foodLog', {}),          // {'YYYY-MM-DD': [foodId,...]}
   myReels: store.get('myReels', []),          // [{id, url, title}] reels added on this phone
+  guideEdits: store.get('guideEdits', {}),    // {'file.md': 'edited text'} guide wording changed on this phone
+  prefs: store.get('prefs', { editMode: false }),
 };
+const REPO = 'longzdalez/Shroom-Buddies-';   // used for "Publish for everyone" (GitHub's own editor)
 const LISTS = {
   supps: { items: 'supps', log: 'suppLog', icon: '💊', label: 'Supplements', noun: 'supplement', ph: 'e.g. Vitamin D', reminders: true },
   food: { items: 'foods', log: 'foodLog', icon: '🥗', label: 'Food', noun: 'food type', ph: 'e.g. Leafy greens', reminders: false },
 };
-const KEYS = ['journal', 'practices', 'done', 'doses', 'checkins', 'supps', 'suppLog', 'foods', 'foodLog', 'myReels'];
+const KEYS = ['journal', 'practices', 'done', 'doses', 'checkins', 'supps', 'suppLog', 'foods', 'foodLog', 'myReels', 'guideEdits', 'prefs'];
 const save = k => store.set(k, S[k]);
 
 // ---------- helpers ----------
@@ -213,11 +216,14 @@ function settingsHTML() {
           <li><b>📓 Journal</b> – write how you feel, your intention for the day and anything you noticed. Tap <b>🎤 Speak</b> to talk instead of typing, and tap <b>⏹ Stop</b> when you're done.</li>
           <li><b>🍄 Tracker</b> – tap a day, then press <b>Microdose</b> or type how many grams and press <b>Save</b>. Use the <b>💊 Supplements</b> and <b>🥗 Food</b> tabs at the top to add your own items and tick them off each day. Give a supplement a time to get a reminder, and press 📅 to add a daily alarm to your phone's calendar.</li>
           <li><b>📅 Calendar</b> – tap any day to see everything you logged. Scroll down for your graph and to see which days you felt best.</li>
-          <li><b>📖 Guides</b> – pick a folder (Microdosing or Flood Doses), then tap a guide to read it.</li>
+          <li><b>📖 Guides</b> – pick a folder (Microdosing or Flood Doses), then tap a guide to read it. To change the wording, switch on <b>Guide editing</b> below, then tap the text in any guide.</li>
           <li><b>🎬 Reels</b> – watch videos we've shared. You can also paste your own Instagram, Facebook, TikTok or YouTube links to keep them here, and tap <b>Watch on…</b> to open them in that app.</li>
           <li><b>⚙️ Settings</b> – add or remove practices, and press <b>Export</b> now and then to save a backup.</li>
         </ol>
         <p class="muted">Everything is kept only on this phone. To install it, open the app in your browser and choose <b>Add to Home Screen</b>.</p></div>
+      <div class="card"><h2>Guide editing</h2>
+        <label class="practice" style="border:0;padding:0"><input type="checkbox" data-editmode ${S.prefs.editMode ? 'checked' : ''}><span style="color:var(--text)">Let me change the wording in the guides</span></label>
+        <p class="muted" style="font-size:.8rem;margin-bottom:0">When this is on, open any guide and tap the text to edit it. Changes save on this phone, and <b>Publish for everyone</b> updates the app for all users.</p></div>
       <div class="card"><h2>Daily practices</h2>
         ${S.practices.map(p => `<div class="practice"><span style="flex:1">${esc(p.name)}</span>
           <button class="ghost small" data-del-practice="${p.id}">Remove</button></div>`).join('')}
@@ -322,15 +328,52 @@ async function loadGuides() {
       v.querySelector('[data-gfolders]').onclick = () => { gFolder = null; loadGuides(); };
       v.querySelectorAll('[data-guide]').forEach(c => c.onclick = async () => {
         const g = f.guides[+c.dataset.guide];
-        const txt = await (await fetch('guides/' + g.file)).text();
-        v.innerHTML = `<button class="ghost small" data-gback>‹ ${esc(f.folder)}</button>
-          ${g.image ? `<img class="guide-page" src="${esc(g.image)}" alt="" onerror="this.remove()">` : ''}<div class="card guide">${md(txt)}</div>`;
-        v.querySelector('[data-gback]').onclick = () => { showList(); window.scrollTo(0, 0); };
-        window.scrollTo(0, 0);
+        const original = await (await fetch('guides/' + g.file, { cache: 'no-cache' })).text();
+        showGuide(v, f, g, original, showList);
       });
     };
     showList();
   } catch { $('#view').innerHTML = '<div class="card muted">Guides are unavailable offline until opened once online.</div>'; }
+}
+
+// one guide page; in editing mode, tap the text to change the wording
+function showGuide(v, f, g, original, back) {
+  if (S.guideEdits[g.file] != null && S.guideEdits[g.file].trim() === original.trim()) { delete S.guideEdits[g.file]; save('guideEdits'); }  // already published
+  const edited = S.guideEdits[g.file], txt = edited ?? original, editing = S.prefs.editMode;
+  v.innerHTML = `<button class="ghost small" data-gback>‹ ${esc(f.folder)}</button>
+    ${g.image ? `<img class="guide-page" src="${esc(g.image)}" alt="" onerror="this.remove()">` : ''}
+    ${edited != null ? '<p class="muted edited-note">✏️ You changed this wording on this phone</p>' : ''}
+    <div class="card guide ${editing ? 'editable' : ''}" ${editing ? 'data-gedit title="Tap to edit"' : ''}>${md(txt)}
+      ${editing ? '<div class="edit-hint">✏️ Tap the text to edit</div>' : ''}</div>`;
+  v.querySelector('[data-gback]').onclick = () => { back(); window.scrollTo(0, 0); };
+  const card = v.querySelector('[data-gedit]');
+  if (card) card.onclick = () => {
+    card.outerHTML = `<div class="card guide-editor"><h2>Edit wording</h2>
+      <textarea id="gText" rows="18">${esc(txt)}</textarea>
+      <p class="muted" style="font-size:.8rem;margin-top:0">Tips: a line starting with <b>#</b> is a title, <b>##</b> a heading, and <b>-</b> a bullet point. Leave an empty line between paragraphs.</p>
+      <div class="row"><button class="ghost" data-gcancel>Cancel</button><button data-gsave>Save</button></div>
+      <button class="ghost" data-gpublish style="width:100%;margin-top:10px">🌍 Publish for everyone</button>
+      ${edited != null ? '<button class="ghost small" data-greset style="margin-top:10px">↺ Go back to the original wording</button>' : ''}</div>`;
+    const ta = v.querySelector('#gText'); ta.focus();
+    v.querySelector('[data-gcancel]').onclick = () => showGuide(v, f, g, original, back);
+    v.querySelector('[data-gsave]').onclick = () => {
+      const t = ta.value.replace(/\s+$/, '') + '\n';
+      if (t.trim() === original.trim()) delete S.guideEdits[g.file]; else S.guideEdits[g.file] = t;
+      save('guideEdits'); showGuide(v, f, g, original, back); window.scrollTo(0, 0);
+    };
+    v.querySelector('[data-gpublish]').onclick = async () => {
+      const t = ta.value.replace(/\s+$/, '') + '\n';
+      S.guideEdits[g.file] = t; save('guideEdits');
+      let copied = true; try { await navigator.clipboard.writeText(t); } catch { copied = false; }
+      v.querySelector('[data-gpublish]').outerHTML = `<div class="publish-steps"><p><b>${copied ? '✅ Your new wording is copied.' : 'Copy your new wording from the box above first.'}</b></p>
+        <ol><li>Tap the button below to open GitHub (sign in if asked).</li><li>Tap in the text box there, select all, and paste.</li><li>Press <b>Commit changes</b>.</li></ol>
+        <p class="muted" style="font-size:.8rem">Everyone will see the new wording a minute or two later.</p>
+        <a class="btn" style="width:100%" href="https://github.com/${REPO}/edit/main/guides/${g.file}" target="_blank" rel="noopener">Open GitHub to paste</a></div>`;
+    };
+    const r = v.querySelector('[data-greset]');
+    if (r) r.onclick = () => { if (confirm('Go back to the original wording?')) { delete S.guideEdits[g.file]; save('guideEdits'); showGuide(v, f, g, original, back); } };
+  };
+  window.scrollTo(0, 0);
 }
 
 // ---------- reels: links to Instagram / Facebook / TikTok / YouTube videos with a preview ----------
@@ -495,6 +538,7 @@ $('#view').addEventListener('change', e => {
     e.target.checked ? d.add(e.target.dataset.item) : d.delete(e.target.dataset.item); S[L.log][trSel] = [...d]; save(L.log);
     const y = scrollY; render(); scrollTo(0, y);
   }
+  if ('editmode' in e.target.dataset) { S.prefs.editMode = e.target.checked; save('prefs'); }
   if (e.target.dataset.time) { const it = S.supps.find(i => i.id === e.target.dataset.time); it.time = e.target.value; save('supps'); const y = scrollY; render(); scrollTo(0, y); }
   if (e.target.id === 'importFile' && e.target.files[0]) {
     e.target.files[0].text().then(t => {
