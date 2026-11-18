@@ -1,5 +1,5 @@
-const CACHE='sb-v10';
-const SHELL=['./','index.html','style.css','app.js','manifest.json','img/logo.svg','guides/guides.json','quotes.json','reels.json','site.json'];
+const CACHE='sb-v11';
+const SHELL=['./','index.html','style.css','app.js','manifest.json','img/logo.svg','guides/guides.json','quotes.json','reels.json','site.json','img/icon-192.png','img/icon-512.png','img/apple-touch-icon.png'];
 self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(SHELL)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
 // Network first (so new guides/pictures show up), fall back to cache when offline
