@@ -21,6 +21,16 @@ const S = {
   prefs: store.get('prefs', { editMode: false }),
 };
 const REPO = 'longzdalez/Shroom-Buddies-';   // used for "Publish for everyone" (GitHub's own editor)
+const ADMIN_SALT = 'shroombuddies-admin:';    // admin passphrase is checked against "adminHash" in site.json
+let SITE = {}, sharedReels = null;            // site.json; reels.json as last loaded (null = not loaded)
+const isAdmin = () => !!S.prefs.admin;
+async function getSite() { try { SITE = await (await fetch('site.json', { cache: 'no-cache' })).json(); } catch {} return SITE; }
+async function sha256(text) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(ADMIN_SALT + text));
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+let installEvt = null;                        // Android "Install app" prompt, when the browser offers it
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; if (current === 'settings') render(); });
 const LISTS = {
   supps: { items: 'supps', log: 'suppLog', icon: '💊', label: 'Supplements', noun: 'supplement', ph: 'e.g. Vitamin D', reminders: true },
   food: { items: 'foods', log: 'foodLog', icon: '🥗', label: 'Food', noun: 'food type', ph: 'e.g. Leafy greens', reminders: false },
@@ -209,6 +219,26 @@ function downloadICS(item) {
   a.download = `reminder-${item.name.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.ics`; a.click();
 }
 
+function installCard() {
+  const installed = matchMedia('(display-mode: standalone)').matches || !!navigator.standalone;
+  return `<div class="card"><h2>📲 Install the app</h2>${installed ? '<p class="muted" style="margin:0">✅ Installed on this phone. Open it from your home screen.</p>'
+    : installEvt ? '<button style="width:100%" data-act="install">📲 Install Shroom Buddies</button>'
+    : `<ol class="muted" style="margin:0;padding-left:20px;font-size:.9rem">
+        <li><b>Android (Chrome):</b> tap ⋮ at the top right, then <b>Install app</b> or <b>Add to Home screen</b>.</li>
+        <li><b>iPhone (Safari):</b> tap the Share button ⬆️, then <b>Add to Home Screen</b>.</li></ol>`}</div>`;
+}
+function signInCard() {
+  return `<div class="card"><h2>🔐 Admin</h2><p class="muted" style="margin-top:0">Only the owner of the app can change the guides and reels.</p>
+    <div class="row"><input id="adminPw" type="password" autocomplete="off" placeholder="Admin passphrase" style="margin-top:0"><button data-act="adminIn" style="flex:0">Sign in</button></div></div>`;
+}
+function adminCard() {
+  return `<div class="card"><h2>🔐 Admin</h2><p class="muted" style="margin-top:0">You're signed in as admin on this phone.</p>
+    <div class="card" style="margin:0 0 12px;padding:12px"><h2 style="margin-bottom:6px">Guide editing</h2>
+    <label class="practice" style="border:0;padding:0"><input type="checkbox" data-editmode ${S.prefs.editMode ? 'checked' : ''}><span style="color:var(--text)">Let me change the wording in the guides</span></label>
+    <p class="muted" style="font-size:.8rem;margin-bottom:0">When this is on, open any guide and tap the text to edit it. Changes save on this phone, and <b>Publish for everyone</b> updates the app for all users.</p></div>
+    <button class="ghost small" data-act="adminOut">Sign out of admin</button></div>`;
+}
+
 function settingsHTML() {
     return `<div class="card howto"><h2>How to use Shroom Buddies</h2>
         <ol>
@@ -216,14 +246,13 @@ function settingsHTML() {
           <li><b>📓 Journal</b> – write how you feel, your intention for the day and anything you noticed. Tap <b>🎤 Speak</b> to talk instead of typing, and tap <b>⏹ Stop</b> when you're done.</li>
           <li><b>🍄 Tracker</b> – tap a day, then press <b>Microdose</b> or type how many grams and press <b>Save</b>. Use the <b>💊 Supplements</b> and <b>🥗 Food</b> tabs at the top to add your own items and tick them off each day. Give a supplement a time to get a reminder, and press 📅 to add a daily alarm to your phone's calendar.</li>
           <li><b>📅 Calendar</b> – tap any day to see everything you logged. Scroll down for your graph and to see which days you felt best.</li>
-          <li><b>📖 Guides</b> – pick a folder (Microdosing or Flood Doses), then tap a guide to read it. To change the wording, switch on <b>Guide editing</b> below, then tap the text in any guide.</li>
-          <li><b>🎬 Reels</b> – watch videos we've shared. You can also paste your own Instagram, Facebook, TikTok or YouTube links to keep them here, and tap <b>Watch on…</b> to open them in that app.</li>
+          <li><b>📖 Guides</b> – pick a folder (Microdosing or Flood Doses), then tap a guide to read it.</li>
+          <li><b>🎬 Reels</b> – watch the videos shared with everyone, and tap <b>Watch on…</b> to open one in its app.</li>
           <li><b>⚙️ Settings</b> – add or remove practices, and press <b>Export</b> now and then to save a backup.</li>
         </ol>
-        <p class="muted">Everything is kept only on this phone. To install it, open the app in your browser and choose <b>Add to Home Screen</b>.</p></div>
-      <div class="card"><h2>Guide editing</h2>
-        <label class="practice" style="border:0;padding:0"><input type="checkbox" data-editmode ${S.prefs.editMode ? 'checked' : ''}><span style="color:var(--text)">Let me change the wording in the guides</span></label>
-        <p class="muted" style="font-size:.8rem;margin-bottom:0">When this is on, open any guide and tap the text to edit it. Changes save on this phone, and <b>Publish for everyone</b> updates the app for all users.</p></div>
+        <p class="muted">Everything is kept only on this phone.</p></div>
+      ${installCard()}
+      ${isAdmin() ? adminCard() : signInCard()}
       <div class="card"><h2>Daily practices</h2>
         ${S.practices.map(p => `<div class="practice"><span style="flex:1">${esc(p.name)}</span>
           <button class="ghost small" data-del-practice="${p.id}">Remove</button></div>`).join('')}
@@ -339,7 +368,7 @@ async function loadGuides() {
 // one guide page; in editing mode, tap the text to change the wording
 function showGuide(v, f, g, original, back) {
   if (S.guideEdits[g.file] != null && S.guideEdits[g.file].trim() === original.trim()) { delete S.guideEdits[g.file]; save('guideEdits'); }  // already published
-  const edited = S.guideEdits[g.file], txt = edited ?? original, editing = S.prefs.editMode;
+  const edited = S.guideEdits[g.file], txt = edited ?? original, editing = isAdmin() && S.prefs.editMode;
   v.innerHTML = `<button class="ghost small" data-gback>‹ ${esc(f.folder)}</button>
     ${g.image ? `<img class="guide-page" src="${esc(g.image)}" alt="" onerror="this.remove()">` : ''}
     ${edited != null ? '<p class="muted edited-note">✏️ You changed this wording on this phone</p>' : ''}
@@ -405,20 +434,23 @@ function reelCard(r, mine) {
     ${mine ? `<button class="ghost small" data-del-reel="${r.id}" style="flex:0">✕</button>` : ''}</div></div>`;
 }
 async function loadReels() {
-  let shared = [];
-  let site = {};
+  let shared = null;
+  const site = await getSite();
   try { shared = await (await fetch('reels.json', { cache: 'no-cache' })).json(); } catch {}
-  try { site = await (await fetch('site.json', { cache: 'no-cache' })).json(); } catch {}
+  sharedReels = shared;
   if (current !== 'reels') return;
+  const list = shared || [];
   const web = /^https:\/\//.test(site.website || '') ? `<a class="btn web-btn" href="${esc(site.website)}" target="_blank" rel="noopener">🌐 Visit our website</a>` : '';
-  $('#view').innerHTML = `${web}<div class="card"><h2>🎬 Add a reel</h2>
-      <p class="muted" style="margin-top:0">Paste a link from Instagram, Facebook, TikTok or YouTube. It's saved on this phone.</p>
+  const adminForm = isAdmin() ? `<div class="card"><h2>🎬 Add a reel</h2>
+      <p class="muted" style="margin-top:0">Paste a link from Instagram, Facebook, TikTok or YouTube.</p>
       <input id="reelUrl" type="url" inputmode="url" placeholder="https://www.instagram.com/reel/…" style="margin-top:0">
       <input id="reelTitle" placeholder="Title (optional)" style="margin-top:0">
-      <button data-act="addReel" style="width:100%">Add reel</button></div>
-    ${[...S.myReels].reverse().map(r => reelCard(r, true)).join('')}
-    ${shared.map(r => reelCard(r, false)).join('')}
-    ${!shared.length && !S.myReels.length ? '<div class="card muted">No reels yet.</div>' : ''}`;
+      <div class="row"><button class="ghost" data-act="addReel">Save on this phone</button><button data-act="shareReel">🌍 Share with everyone</button></div>
+      <div id="reelSteps"></div></div>` : '';
+  $('#view').innerHTML = `${web}${adminForm}
+    ${isAdmin() ? [...S.myReels].reverse().map(r => reelCard(r, true)).join('') : ''}
+    ${list.map(r => reelCard(r, false)).join('')}
+    ${!list.length && !(isAdmin() && S.myReels.length) ? '<div class="card muted">No reels yet.</div>' : ''}`;
 }
 
 const doseText = d => !d ? '' : d.micro ? 'Microdose' : `${d.grams}g`;
@@ -542,13 +574,13 @@ $('#view').addEventListener('change', e => {
   if (e.target.dataset.time) { const it = S.supps.find(i => i.id === e.target.dataset.time); it.time = e.target.value; save('supps'); const y = scrollY; render(); scrollTo(0, y); }
   if (e.target.id === 'importFile' && e.target.files[0]) {
     e.target.files[0].text().then(t => {
-      try { const d = JSON.parse(t); KEYS.forEach(k => { if (d[k]) { S[k] = d[k]; save(k); } }); go('today'); }
+      try { const d = JSON.parse(t); KEYS.forEach(k => { if (d[k]) { S[k] = k === 'prefs' ? { ...d[k], admin: S.prefs.admin } : d[k]; save(k); } }); go('today'); }
       catch { alertMsg('That file is not a valid backup.'); }
     });
   }
 });
 
-$('#view').addEventListener('click', e => {
+$('#view').addEventListener('click', async e => {
   const t = e.target.closest('button,[data-day],[data-trday]'); if (!t) return;
   const d = t.dataset;
   if (d.day) { calSel = d.day; render(); return; }
@@ -583,9 +615,30 @@ $('#view').addEventListener('click', e => {
       if (!reelInfo(url)) { alert('Please paste a full link starting with https://'); return; }
       S.myReels.push({ id: uid(), url, title }); save('myReels'); return render();
     }
+    case 'shareReel': {
+      const url = $('#reelUrl').value.trim(), title = $('#reelTitle').value.trim();
+      if (!reelInfo(url)) { alert('Please paste a full link starting with https://'); return; }
+      if (!sharedReels) { alert("The reel list didn't load. Check your connection and try again."); return; }
+      const text = JSON.stringify([...sharedReels, title ? { title, url } : { url }], null, 2) + '\n';
+      let copied = true; try { await navigator.clipboard.writeText(text); } catch { copied = false; }
+      $('#reelSteps').innerHTML = `<div class="publish-steps"><p><b>${copied ? '✅ The new reel list is copied.' : 'Copy the text below first, then continue.'}</b></p>
+        <ol><li>Tap the button below to open GitHub (sign in if asked).</li><li>Tap in the text box there, select all, and paste.</li><li>Press <b>Commit changes</b>.</li></ol>
+        ${copied ? '' : `<textarea rows="6" readonly>${esc(text)}</textarea>`}
+        <p class="muted" style="font-size:.8rem">Everyone will see the new reel a minute or two later.</p>
+        <a class="btn" style="width:100%" href="https://github.com/${REPO}/edit/main/reels.json" target="_blank" rel="noopener">Open GitHub to paste</a></div>`;
+      return;
+    }
+    case 'adminIn': {
+      const site = await getSite();
+      if (!site.adminHash) { alert('Admin sign-in is not set up yet.'); return; }
+      if (await sha256($('#adminPw').value) !== site.adminHash) { alert('That passphrase is not right.'); return; }
+      S.prefs.admin = true; save('prefs'); return render();
+    }
+    case 'adminOut': S.prefs.admin = false; S.prefs.editMode = false; save('prefs'); return render();
+    case 'install': if (installEvt) { installEvt.prompt(); installEvt = null; } return;
     case 'addPractice': { const v = $('#newPractice').value.trim(); if (v) { S.practices.push({ id: uid(), name: v }); save('practices'); render(); } return; }
     case 'export': {
-      const blob = new Blob([JSON.stringify(Object.fromEntries(KEYS.map(k => [k, S[k]])), null, 2)], { type: 'application/json' });
+      const blob = new Blob([JSON.stringify(Object.fromEntries(KEYS.map(k => [k, k === 'prefs' ? { ...S.prefs, admin: false } : S[k]])), null, 2)], { type: 'application/json' });
       const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `shroom-buddies-backup-${today()}.json`; a.click(); return;
     }
     case 'import': return $('#importFile').click();
