@@ -18,6 +18,8 @@ const S = {
   foodLog: store.get('foodLog', {}),          // {'YYYY-MM-DD': [foodId,...]}
   myReels: store.get('myReels', []),          // [{id, url, title}] reels added on this phone
   guideEdits: store.get('guideEdits', {}),    // {'file.md': 'edited text'} guide wording changed on this phone
+  reading: store.get('reading', []),          // [{id, name, freq}] books and literature to read
+  readLog: store.get('readLog', {}),          // {'YYYY-MM-DD': [readingId,...]}
   prefs: store.get('prefs', { editMode: false }),
 };
 const REPO = 'longzdalez/Shroom-Buddies-';   // used for "Publish for everyone" (GitHub's own editor)
@@ -34,9 +36,37 @@ window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); instal
 const LISTS = {
   supps: { items: 'supps', log: 'suppLog', icon: '💊', label: 'Supplements', noun: 'supplement', ph: 'e.g. Vitamin D', reminders: true },
   food: { items: 'foods', log: 'foodLog', icon: '🥗', label: 'Food', noun: 'food type', ph: 'e.g. Leafy greens', reminders: false },
+  reading: { items: 'reading', log: 'readLog', icon: '📚', label: 'Reading & Literature', noun: 'book or piece of literature', ph: 'e.g. The Doors of Perception', reminders: false },
 };
-const KEYS = ['journal', 'practices', 'done', 'doses', 'checkins', 'supps', 'suppLog', 'foods', 'foodLog', 'myReels', 'guideEdits', 'prefs'];
+const KEYS = ['journal', 'practices', 'done', 'doses', 'checkins', 'supps', 'suppLog', 'foods', 'foodLog', 'myReels', 'guideEdits', 'reading', 'readLog', 'prefs'];
 const save = k => store.set(k, S[k]);
+
+// ---------- pages (swipe left and right) ----------
+const PAGES = ['today', 'practices', 'tracker', 'supplements', 'reading', 'journal', 'calendar', 'guides', 'reels', 'settings'];
+const LIVE = ['today', 'practices', 'tracker', 'supplements', 'reading', 'journal', 'calendar', 'settings'];  // redrawn on every change
+function pageEl(n) { return document.getElementById('p-' + n) || $('#view'); }
+let listDay = null;                           // day shown on the Supplements and Reading pages (set at start-up)
+let editing = null;                           // {kind, id} while the add/edit form is open on a list page
+
+// ---------- how often an item is due ----------
+const WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const weekIdx = k => (new Date(k + 'T12:00').getDay() + 6) % 7;   // 0 = Monday
+function isDue(item, k) {
+  const f = item.freq || { type: 'daily' };
+  if (f.type === 'days') return (f.days || []).includes(weekIdx(k));
+  if (f.type === 'every') {
+    const n = Math.max(1, +f.every || 1), start = f.start || k;
+    const d = Math.round((new Date(k + 'T12:00') - new Date(start + 'T12:00')) / 864e5);
+    return d >= 0 && d % n === 0;
+  }
+  return true;
+}
+function freqText(item) {
+  const f = item.freq || { type: 'daily' };
+  if (f.type === 'days') return (f.days || []).length ? (f.days || []).map(i => WEEK[i]).join(', ') : 'Choose days';
+  if (f.type === 'every') { const n = Math.max(1, +f.every || 1); return `Every ${n} day${n === 1 ? '' : 's'}`; }
+  return 'Every day';
+}
 
 // ---------- helpers ----------
 const $ = s => document.querySelector(s);
@@ -47,7 +77,7 @@ const today = () => dkey(new Date());
 const nice = k => new Date(k + 'T12:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 const MOODS = ['😞', '😕', '😐', '🙂', '😄'];
-function alertMsg(m) { const v = $('#view'); if (v) v.insertAdjacentHTML('afterbegin', `<div class="card">${esc(m)}</div>`); }
+function alertMsg(m) { const v = pageEl(current); if (v) v.insertAdjacentHTML('afterbegin', `<div class="card">${esc(m)}</div>`); }
 
 // Tiny safe markdown renderer for guides (escapes HTML first)
 function md(src) {
@@ -84,19 +114,19 @@ const views = {
           <div class="muted">${n} of ${S.practices.length} practices done</div>
           <div class="chips"><span class="chip">🔥 ${st} day streak</span><span class="chip">📓 ${S.journal.length} entries</span></div></div></div>
       ${checkinHTML(k)}
-      <div class="card"><h2>Daily practices</h2>
+      `;
+  },
+  practices() {
+    const k = today(), done = S.done[k] || [];
+    return `      <div class="card"><h2>Daily practices</h2>
         ${S.practices.map(p => `<label class="practice ${done.includes(p.id) ? 'done' : ''}">
           <input type="checkbox" data-practice="${p.id}" ${done.includes(p.id) ? 'checked' : ''}><span>${esc(p.name)}</span></label>`).join('')}
       </div>
-      <div class="card"><h2>Journal</h2>
-        ${todays.length ? todays.map(entryHTML).join('') : '<p class="muted">No entry yet today.</p>'}
-        <button data-act="newEntry">+ Write today's entry</button></div>`;
+`;
   },
-  journal() {
-    const list = [...S.journal].sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
-    return `<button data-act="newEntry" style="width:100%;margin-bottom:12px">+ New entry</button>
-      ${list.length ? list.map(e => `<div class="card">${entryHTML(e)}</div>`).join('') : '<div class="card muted">Your journal is empty. Start with how you feel today.</div>'}`;
-  },
+  supplements() { return listPage('supps'); },
+  reading() { return listPage('reading'); },
+  journal() { return journalPage(); },
   calendar() {
     const y = calMonth.getFullYear(), m = calMonth.getMonth();
     const first = (new Date(y, m, 1).getDay() + 6) % 7, days = new Date(y, m + 1, 0).getDate();
@@ -118,18 +148,19 @@ const views = {
         <div class="muted">Morning: ${ciText((S.checkins[calSel] || {}).am)} · Afternoon: ${ciText((S.checkins[calSel] || {}).pm)}</div>
         <div class="muted">Supplements: ${names('supps', calSel) || 'none'}</div>
         <div class="muted">Food: ${names('food', calSel) || 'none'}</div>
+        <div class="muted">Reading: ${names('reading', calSel) || 'none'}</div>
         <div class="muted">Practices: ${done.length ? S.practices.filter(p => done.includes(p.id)).map(p => esc(p.name)).join(', ') : 'none'}</div>
         ${ents.map(e => `<div style="margin-top:10px">${entryHTML(e)}</div>`).join('')}
         <button class="small" data-act="newEntry" data-date="${calSel}" style="margin-top:10px">+ Entry for this day</button></div>
       ${graphHTML(y, m)}`;
   },
   tracker() {
-    const tabs = `<div class="subtabs">${[['shroom', '🍄 Shrooms'], ['supps', '💊 Supplements'], ['food', '🥗 Food']].map(([t, l]) =>
+    const tabs = `<div class="subtabs">${[['shroom', '🍄 Shrooms'], ['food', '🥗 Food']].map(([t, l]) =>
       `<button class="${trTab === t ? 'on' : ''}" data-trtab="${t}">${l}</button>`).join('')}</div>`;
-    return tabs + (trTab === 'shroom' ? shroomTracker() : listTracker(trTab));
+    return tabs + (trTab === 'shroom' ? shroomTracker() : listTracker('food'));
   },
-  guides() { loadGuides(); return '<div class="card muted">Loading guides…</div>'; },
-  reels() { loadReels(); return '<div class="card muted">Loading reels…</div>'; },
+  guides() { return '<div class="card muted">Loading guides…</div>'; },
+  reels() { return '<div class="card muted">Loading reels…</div>'; },
   settings() { return settingsHTML(); },
 };
 
@@ -162,6 +193,57 @@ function shroomTracker() {
         <div class="row" style="margin-top:10px"><input id="grams" type="number" inputmode="decimal" min="0" step="0.01" placeholder="Or type grams" value="${cur && cur.grams ? cur.grams : ''}" style="margin:0">
           <button data-act="logGrams" style="flex:0">Save</button></div>
         ${cur ? '<button class="ghost small" data-act="clearDose" style="margin-top:10px">Clear this day</button>' : ''}</div>`;
+}
+
+// ---------- supplements & reading pages (tick what's due, set how often) ----------
+function listPage(kind) {
+  const L = LISTS[kind], items = S[L.items], sel = (S[L.log][listDay] || []), k = listDay, isToday = k === today();
+  const doneCount = items.filter(i => sel.includes(i.id)).length, dueCount = items.filter(i => isDue(i, k)).length;
+  const nav = `<div class="row" style="margin-bottom:10px"><button class="ghost small" data-act="lday" data-step="-1" style="flex:0">‹</button>
+      <h2 style="text-align:center;margin:0;flex:1">${isToday ? 'Today' : nice(k)}</h2>
+      <button class="ghost small" data-act="lday" data-step="1" style="flex:0">›</button></div>`;
+  const rows = items.length ? items.map(i => `<div class="practice ${sel.includes(i.id) ? 'done' : ''}">
+      <label style="display:flex;align-items:center;gap:12px;flex:1;cursor:pointer;min-width:0">
+        <input type="checkbox" data-lt="${kind}" data-item="${i.id}" ${sel.includes(i.id) ? 'checked' : ''}>
+        <span style="flex:1">${esc(i.name)}<br><small class="muted">${freqText(i)}${isDue(i, k) ? '' : ' · not due'}${i.time ? ' · ⏰ ' + i.time : ''}</small></span></label>
+      <button class="ghost small" style="flex:0" data-act="ledit" data-kind="${kind}" data-id="${i.id}" aria-label="Edit">✎</button></div>`).join('')
+    : `<p class="muted">Nothing on this list yet. Tap + below to add ${L.noun}s.</p>`;
+  return `<div class="card hero"><div class="ring" style="--p:${items.length ? doneCount / items.length * 100 : 0}"><div><b>${doneCount}/${items.length}</b><small>${isToday ? 'TODAY' : 'DAY'}</small></div></div>
+      <div><div class="date">${L.label}</div><div class="muted">${dueCount} due ${isToday ? 'today' : 'this day'}</div></div></div>
+    <div class="card">${nav}${rows}</div>
+    ${editorHTML(kind)}`;
+}
+function editorHTML(kind) {
+  const L = LISTS[kind];
+  if (!editing || editing.kind !== kind)
+    return `<button style="width:100%" data-act="lnew" data-kind="${kind}">+ Add to ${L.label}</button>`;
+  const it = editing.id ? S[L.items].find(i => i.id === editing.id) : null;
+  const f = (it && it.freq) || { type: 'daily' }, days = f.days || [];
+  return `<div class="card"><h2>${it ? 'Edit' : 'New'} ${L.noun}</h2>
+    <label>Name</label><input id="iName" value="${esc(it ? it.name : '')}" placeholder="${L.ph}" style="margin-top:0">
+    <label>How often</label>
+    <select id="iType" style="margin-top:0">
+      <option value="daily" ${f.type !== 'days' && f.type !== 'every' ? 'selected' : ''}>Every day</option>
+      <option value="days" ${f.type === 'days' ? 'selected' : ''}>On certain days of the week</option>
+      <option value="every" ${f.type === 'every' ? 'selected' : ''}>Every few days</option></select>
+    <p class="muted" style="font-size:.8rem;margin:10px 0 4px">If you chose certain days, tick them:</p>
+    <div class="weekdays">${WEEK.map((w, i) => `<label class="wd"><input type="checkbox" class="wdc" value="${i}" ${days.includes(i) ? 'checked' : ''}><span>${w}</span></label>`).join('')}</div>
+    <label>If you chose every few days, how many days apart?</label>
+    <input id="iEvery" type="number" inputmode="numeric" min="1" max="365" value="${f.every || 2}" style="margin-top:0">
+    ${kind === 'supps' ? `<label>Reminder time (optional)</label><input id="iTime" type="time" value="${it && it.time ? it.time : ''}" style="margin-top:0">` : ''}
+    <div class="row" style="margin-top:12px"><button class="ghost" data-act="lcancel">Cancel</button>
+      ${it ? `<button class="ghost" data-act="ldel" data-kind="${kind}" data-id="${it.id}">Remove</button>` : ''}
+      <button data-act="lsave" data-kind="${kind}">Save</button></div></div>`;
+}
+
+// ---------- journal page: latest entry open, earlier entries below ----------
+function journalPage() {
+  const list = [...S.journal].sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
+  const latest = list[0], older = list.slice(1);
+  return `<button data-act="newEntry" style="width:100%;margin-bottom:12px">+ New entry</button>
+    ${latest ? `<div class="card"><div class="muted" style="font-size:.72rem;letter-spacing:.12em;text-transform:uppercase">Latest entry</div>${entryHTML(latest)}</div>`
+      : '<div class="card muted">Your journal is empty. Start with how you feel today.</div>'}
+    ${older.length ? `<div class="card"><h2>Earlier entries</h2>${older.map(e => `<details class="older"><summary>${MOODS[e.mood - 1] || ''} ${nice(e.date)}${e.intention ? ' · ' + esc(e.intention) : ''}</summary>${entryHTML(e)}</details>`).join('')}</div>` : ''}`;
 }
 
 // ---------- supplements & food trackers ----------
@@ -204,7 +286,7 @@ function listTracker(t) {
 // reminders due now (supplements with a time that aren't ticked yet today)
 function remindersHTML() {
   const now = `${z(new Date().getHours())}:${z(new Date().getMinutes())}`, taken = S.suppLog[today()] || [];
-  const due = S.supps.filter(i => i.time && i.time <= now && !taken.includes(i.id));
+  const due = S.supps.filter(i => i.time && i.time <= now && !taken.includes(i.id) && isDue(i, today()));
   return due.length ? `<div class="card reminder"><h2>⏰ Supplement reminder</h2>${due.map(i =>
     `<div class="item-row"><span>💊 ${esc(i.name)} <small class="muted">(${i.time})</small></span><button class="small" data-quick="${i.id}">Taken ✓</button></div>`).join('')}</div>` : '';
 }
@@ -242,17 +324,22 @@ function adminCard() {
 function settingsHTML() {
     return `<div class="card howto"><h2>How to use Shroom Buddies</h2>
         <ol>
-          <li><b>🌱 Today</b> – tap your mood and energy in the morning and again in the afternoon, then tick off each practice as you do it.</li>
-          <li><b>📓 Journal</b> – write how you feel, your intention for the day and anything you noticed. Tap <b>🎤 Speak</b> to talk instead of typing, and tap <b>⏹ Stop</b> when you're done.</li>
-          <li><b>🍄 Tracker</b> – tap a day, then press <b>Microdose</b> or type how many grams and press <b>Save</b>. Use the <b>💊 Supplements</b> and <b>🥗 Food</b> tabs at the top to add your own items and tick them off each day. Give a supplement a time to get a reminder, and press 📅 to add a daily alarm to your phone's calendar.</li>
-          <li><b>📅 Calendar</b> – tap any day to see everything you logged. Scroll down for your graph and to see which days you felt best.</li>
-          <li><b>📖 Guides</b> – pick a folder (Microdosing or Flood Doses), then tap a guide to read it.</li>
-          <li><b>🎬 Reels</b> – watch the videos shared with everyone, and tap <b>Watch on…</b> to open one in its app.</li>
-          <li><b>⚙️ Settings</b> – add or remove practices, and press <b>Export</b> now and then to save a backup.</li>
+          <li><b>Swipe</b> left and right to move between pages, or tap the buttons at the bottom.</li>
+          <li><b>🌱 Today</b> – tap your mood and energy in the morning and again in the afternoon.</li>
+          <li><b>✅ Practices</b> – tick off each daily practice as you do it.</li>
+          <li><b>🍄 Tracker</b> – tap a day, then press <b>Microdose</b> or type grams and press <b>Save</b>. Food is here too.</li>
+          <li><b>💊 Supplements</b> and <b>📚 Reading</b> – tick off what's due. Tap ✎ to change the name, how often, or the reminder time.</li>
+          <li><b>📓 Journal</b> – your latest entry is shown open. Tap <b>+ New entry</b> to write another, or 🎤 to speak.</li>
+          <li><b>📅 Calendar</b> – tap any day to see everything you logged.</li>
+          <li><b>📖 Guides</b> – pick a folder, then tap a guide to read it.</li>
+          <li><b>🎬 Reels</b> – your own reels show first. Tap 📤 to share one with a friend. Shared reels are underneath.</li>
+          <li><b>⚙️ Settings</b> – practices, the install card, backup and admin.</li>
         </ol>
         <p class="muted">Everything is kept only on this phone.</p></div>
       ${installCard()}
       ${isAdmin() ? adminCard() : signInCard()}
+      <div class="card"><h2>Supplements & reading</h2><p class="muted" style="margin-top:0">Add, change or remove items and how often you take or read them.</p>
+        <div class="row"><button class="ghost" data-nav="supplements">💊 Supplements</button><button class="ghost" data-nav="reading">📚 Reading</button></div></div>
       <div class="card"><h2>Daily practices</h2>
         ${S.practices.map(p => `<div class="practice"><span style="flex:1">${esc(p.name)}</span>
           <button class="ghost small" data-del-practice="${p.id}">Remove</button></div>`).join('')}
@@ -274,7 +361,8 @@ function entryHTML(e) {
 function entryForm(e) {
   const scale = (name, val, icons) => `<div class="scale" data-scale="${name}">${[1, 2, 3, 4, 5].map(i =>
     `<button type="button" class="${val === i ? 'sel' : ''}" data-v="${i}">${icons ? icons[i - 1] : i}</button>`).join('')}</div>`;
-  $('#view').innerHTML = `<div class="card"><h2>${e.id ? 'Edit entry' : 'New entry'}</h2>
+  const pe = pageEl(current);
+  pe.innerHTML = `<div class="card"><h2>${e.id ? 'Edit entry' : 'New entry'}</h2>
     <label>Date</label><input type="date" id="fDate" value="${e.date}">
     <label>Mood</label>${scale('mood', e.mood, MOODS)}
     <label>Energy</label>${scale('energy', e.energy)}
@@ -282,8 +370,8 @@ function entryForm(e) {
     <div class="lbl-row"><label for="fText">Notes</label>${micBtn('fText')}</div><textarea id="fText" placeholder="How are you feeling? What did you notice? Tap 🎤 to speak.">${esc(e.text)}</textarea>
     <div class="row"><button class="ghost" data-act="cancel">Cancel</button><button data-act="saveEntry">Save</button></div></div>`;
   const form = { ...e };
-  $('#view').querySelectorAll('[data-mic]').forEach(b => b.onclick = () => dictate(b));
-  $('#view').querySelectorAll('[data-scale]').forEach(sc => sc.onclick = ev => {
+  pe.querySelectorAll('[data-mic]').forEach(b => b.onclick = () => dictate(b));
+  pe.querySelectorAll('[data-scale]').forEach(sc => sc.onclick = ev => {
     const b = ev.target.closest('button'); if (!b) return;
     form[sc.dataset.scale] = +b.dataset.v; sc.querySelectorAll('button').forEach(x => x.classList.toggle('sel', x === b));
   });
@@ -339,7 +427,7 @@ async function loadGuides() {
     let list = await (await fetch('guides/guides.json', { cache: 'no-cache' })).json();
     if (current !== 'guides') return;
     const folders = list.length && list[0].folder ? list : [{ folder: 'Guides', guides: list }];
-    const v = $('#view');
+    const v = pageEl('guides');
     if (gFolder === null) {          // folder list
       v.innerHTML = folders.map((f, i) => `<div class="card guide-link folder" data-folder="${i}">
         ${f.cover ? `<img src="${esc(f.cover)}" alt="" onerror="this.remove()">` : ''}
@@ -362,7 +450,7 @@ async function loadGuides() {
       });
     };
     showList();
-  } catch { $('#view').innerHTML = '<div class="card muted">Guides are unavailable offline until opened once online.</div>'; }
+  } catch { pageEl('guides').innerHTML = '<div class="card muted">Guides are unavailable offline until opened once online.</div>'; }
 }
 
 // one guide page; in editing mode, tap the text to change the wording
@@ -431,7 +519,7 @@ function reelCard(r, mine) {
     : info.thumb ? `<a href="${url}" target="_blank" rel="noopener" class="reel-thumb"><img src="${esc(info.thumb)}" alt="" loading="lazy"><span>▶</span></a>` : '';
   return `<div class="card reel">${r.title ? `<h2>${esc(r.title)}</h2>` : ''}${preview}
     <div class="row" style="margin-top:10px"><a class="btn" href="${url}" target="_blank" rel="noopener">${info.icon} Watch on ${esc(info.site)}</a>
-    ${mine ? `<button class="ghost small" data-del-reel="${r.id}" style="flex:0">✕</button>` : ''}</div></div>`;
+    ${mine ? `<button class="ghost small" data-share="${url}" style="flex:0" aria-label="Share">📤</button><button class="ghost small" data-del-reel="${r.id}" style="flex:0" aria-label="Remove">✕</button>` : ''}</div></div>`;
 }
 async function loadReels() {
   let shared = null;
@@ -441,16 +529,20 @@ async function loadReels() {
   if (current !== 'reels') return;
   const list = shared || [];
   const web = /^https:\/\//.test(site.website || '') ? `<a class="btn web-btn" href="${esc(site.website)}" target="_blank" rel="noopener">🌐 Visit our website</a>` : '';
-  const adminForm = isAdmin() ? `<div class="card"><h2>🎬 Add a reel</h2>
-      <p class="muted" style="margin-top:0">Paste a link from Instagram, Facebook, TikTok or YouTube.</p>
+  const addForm = `<div class="card"><h2>🎬 Add a reel to your phone</h2>
+      <p class="muted" style="margin-top:0">Paste a link from Instagram, Facebook, TikTok or YouTube. It shows only on this phone.</p>
       <input id="reelUrl" type="url" inputmode="url" placeholder="https://www.instagram.com/reel/…" style="margin-top:0">
       <input id="reelTitle" placeholder="Title (optional)" style="margin-top:0">
-      <div class="row"><button class="ghost" data-act="addReel">Save on this phone</button><button data-act="shareReel">🌍 Share with everyone</button></div>
-      <div id="reelSteps"></div></div>` : '';
-  $('#view').innerHTML = `${web}${adminForm}
-    ${isAdmin() ? [...S.myReels].reverse().map(r => reelCard(r, true)).join('') : ''}
+      <button data-act="addReel" style="width:100%">Add reel</button></div>`;
+  const adminBox = isAdmin() ? `<div class="card"><h2>🌍 Share with everyone</h2>
+      <p class="muted" style="margin-top:0">Paste a link in the box above, then press this to add it to everyone's reels.</p>
+      <button class="ghost" data-act="shareReel" style="width:100%">Share with everyone</button><div id="reelSteps"></div></div>` : '';
+  pageEl('reels').innerHTML = `${web}${addForm}${adminBox}
+    ${S.myReels.length ? '<div class="sec">Your reels</div>' : ''}
+    ${[...S.myReels].reverse().map(r => reelCard(r, true)).join('')}
+    ${list.length ? '<div class="sec">Shared reels</div>' : ''}
     ${list.map(r => reelCard(r, false)).join('')}
-    ${!list.length && !(isAdmin() && S.myReels.length) ? '<div class="card muted">No reels yet.</div>' : ''}`;
+    ${!list.length && !S.myReels.length ? '<div class="card muted">No reels yet.</div>' : ''}`;
 }
 
 const doseText = d => !d ? '' : d.micro ? 'Microdose' : `${d.grams}g`;
@@ -551,13 +643,19 @@ function graphHTML(y, m) {
 })();
 
 // ---------- render & events ----------
-function render() {
-  stopDictation();
-  $('#view').innerHTML = views[current]();
-  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b.dataset.view === current));
-  window.scrollTo(0, 0);
+function render() { stopDictation(); LIVE.forEach(renderPage); setActive(); }
+function renderPage(name) {
+  const el = document.getElementById('p-' + name); if (!el || !views[name]) return;
+  const y = el.scrollTop; el.innerHTML = views[name](); el.scrollTop = y;
+  if (name === 'guides') loadGuides();
+  if (name === 'reels') loadReels();
 }
-function go(v) { current = v; render(); }
+function setActive() { document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b.dataset.view === current)); }
+function scrollToPage(name, smooth = true) {
+  const box = $('#view'), i = PAGES.indexOf(name); if (i < 0) return;
+  box.scrollTo({ left: i * box.clientWidth, behavior: smooth ? 'smooth' : 'auto' });
+}
+function go(v) { current = v; setActive(); renderPage(v); scrollToPage(v); }
 
 document.querySelector('nav').onclick = e => { const b = e.target.closest('button'); if (b) { if (b.dataset.view === 'guides') gFolder = null; go(b.dataset.view); } };
 $('#settingsBtn').onclick = () => go('settings');
@@ -566,8 +664,9 @@ $('#view').addEventListener('change', e => {
   const id = e.target.dataset.practice;
   if (id) { const k = today(), d = new Set(S.done[k] || []); e.target.checked ? d.add(id) : d.delete(id); S.done[k] = [...d]; save('done'); render(); }
   if (e.target.dataset.item) {
-    const L = LISTS[e.target.dataset.lt], d = new Set(S[L.log][trSel] || []);
-    e.target.checked ? d.add(e.target.dataset.item) : d.delete(e.target.dataset.item); S[L.log][trSel] = [...d]; save(L.log);
+    const kind = e.target.dataset.lt, L = LISTS[kind], day = kind === 'food' ? trSel : listDay;
+    const d = new Set(S[L.log][day] || []);
+    e.target.checked ? d.add(e.target.dataset.item) : d.delete(e.target.dataset.item); S[L.log][day] = [...d]; save(L.log);
     const y = scrollY; render(); scrollTo(0, y);
   }
   if ('editmode' in e.target.dataset) { S.prefs.editMode = e.target.checked; save('prefs'); }
@@ -594,11 +693,16 @@ $('#view').addEventListener('click', async e => {
     p[d.f] = p[d.f] === v ? 0 : v; save('checkins');
     const y = scrollY; render(); scrollTo(0, y); return;
   }
-  if (d.delReel) { if (confirm('Remove this reel?')) { S.myReels = S.myReels.filter(r => r.id !== d.delReel); save('myReels'); render(); } return; }
+  if (d.delReel) { if (confirm('Remove this reel?')) { S.myReels = S.myReels.filter(r => r.id !== d.delReel); save('myReels'); loadReels(); } return; }
   if (d.nav) return go(d.nav);
   if (d.edit) return entryForm(S.journal.find(x => x.id === d.edit));
   if (d.delEntry) { if (confirm('Delete this entry?')) { S.journal = S.journal.filter(x => x.id !== d.delEntry); save('journal'); render(); } return; }
   if (d.delPractice) { S.practices = S.practices.filter(p => p.id !== d.delPractice); save('practices'); render(); return; }
+  if (d.share) {
+    if (navigator.share) { try { await navigator.share({ title: 'Reel', url: d.share }); } catch {} return; }
+    try { await navigator.clipboard.writeText(d.share); alert('Link copied. Paste it into a message to share.'); } catch { alert(d.share); }
+    return;
+  }
   switch (d.act) {
     case 'newEntry': return entryForm({ date: d.date || today(), mood: 0, energy: 0, intention: '', text: '' });
     case 'cancel': return render();
@@ -613,7 +717,7 @@ $('#view').addEventListener('click', async e => {
     case 'addReel': {
       const url = $('#reelUrl').value.trim(), title = $('#reelTitle').value.trim();
       if (!reelInfo(url)) { alert('Please paste a full link starting with https://'); return; }
-      S.myReels.push({ id: uid(), url, title }); save('myReels'); return render();
+      S.myReels.push({ id: uid(), url, title }); save('myReels'); return loadReels();
     }
     case 'shareReel': {
       const url = $('#reelUrl').value.trim(), title = $('#reelTitle').value.trim();
@@ -636,6 +740,27 @@ $('#view').addEventListener('click', async e => {
     }
     case 'adminOut': S.prefs.admin = false; S.prefs.editMode = false; save('prefs'); return render();
     case 'install': if (installEvt) { installEvt.prompt(); installEvt = null; } return;
+    case 'lday': { const dt = new Date(listDay + 'T12:00'); dt.setDate(dt.getDate() + (+d.step)); listDay = dkey(dt); return render(); }
+    case 'lnew': editing = { kind: d.kind, id: null }; return render();
+    case 'ledit': editing = { kind: d.kind, id: d.id }; return render();
+    case 'lcancel': editing = null; return render();
+    case 'ldel': {
+      const L = LISTS[d.kind];
+      if (confirm('Remove this from your list?')) { S[L.items] = S[L.items].filter(i => i.id !== d.id); save(L.items); }
+      editing = null; return render();
+    }
+    case 'lsave': {
+      const kind = d.kind, L = LISTS[kind], name = $('#iName').value.trim();
+      if (!name) { alert('Please type a name first.'); return; }
+      const type = $('#iType').value, days = [...document.querySelectorAll('.wdc:checked')].map(c => +c.value);
+      if (type === 'days' && !days.length) { alert('Tick at least one day of the week.'); return; }
+      const every = Math.max(1, Math.min(365, parseInt($('#iEvery').value, 10) || 2));
+      const list = S[L.items], prev = editing && editing.id ? list.find(i => i.id === editing.id) : null;
+      const freq = { type, days: type === 'days' ? days : [], every, start: (prev && prev.freq && prev.freq.start) || today() };
+      if (prev) { prev.name = name; prev.freq = freq; if (kind === 'supps') prev.time = $('#iTime').value || ''; }
+      else list.push({ id: uid(), name, freq, time: kind === 'supps' ? ($('#iTime').value || '') : '' });
+      save(L.items); editing = null; return render();
+    }
     case 'addPractice': { const v = $('#newPractice').value.trim(); if (v) { S.practices.push({ id: uid(), name: v }); save('practices'); render(); } return; }
     case 'export': {
       const blob = new Blob([JSON.stringify(Object.fromEntries(KEYS.map(k => [k, k === 'prefs' ? { ...S.prefs, admin: false } : S[k]])), null, 2)], { type: 'application/json' });
@@ -645,6 +770,22 @@ $('#view').addEventListener('click', async e => {
   }
 });
 
+listDay = today();
+PAGES.forEach(n => { const d = document.createElement('div'); d.className = 'page'; d.id = 'p-' + n; $('#view').appendChild(d); });
+function layoutVars() {
+  document.documentElement.style.setProperty('--hdr', document.querySelector('header').offsetHeight + 'px');
+  document.documentElement.style.setProperty('--nav', document.querySelector('nav').offsetHeight + 'px');
+}
+layoutVars(); addEventListener('resize', layoutVars);
+let swipeT = null;
+$('#view').addEventListener('scroll', () => {          // after a swipe settles, make that page current
+  clearTimeout(swipeT);
+  swipeT = setTimeout(() => {
+    const box = $('#view'), name = PAGES[Math.round(box.scrollLeft / box.clientWidth)];
+    if (name && name !== current) { current = name; setActive(); if (name === 'guides' || name === 'reels') renderPage(name); }
+  }, 90);
+});
 render();
-setInterval(() => { if (current === 'today' && !$('#fText')) { const y = scrollY; render(); scrollTo(0, y); } }, 60000);
+scrollToPage(current, false);
+setInterval(() => { if (!$('#fText') && !$('#iName')) renderPage('today'); }, 60000);
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
